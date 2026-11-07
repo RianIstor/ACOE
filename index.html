@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Dark Survival: Always Works</title>
+    <title>Dark Survival: Robust Multiplayer</title>
     
     <!-- Импорт Firebase -->
     <script type="module">
@@ -29,12 +29,9 @@
             
             window.FB_DB = db;
             window.FB_FUNCS = { collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc };
-            
-            // Глобальный флаг готовности сети
-            window.NETWORK_READY = true;
         } catch (e) { 
             console.error("❌ Firebase Init Error:", e); 
-            window.NETWORK_READY = false;
+            window.FB_DB = null;
         }
     </script>
 
@@ -73,11 +70,29 @@
             box-shadow: 0 0 10px rgba(255, 255, 200, 0.5);
             display: none;
         }
+
+        /* Индикатор статуса сети в игре */
+        #net-status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #888;
+            z-index: 10;
+            display: none;
+        }
+        .net-ok { color: #0f0 !important; }
+        .net-warn { color: #ff0 !important; }
+        .net-bad { color: #f00 !important; }
     </style>
 </head>
 <body>
 
 <div id="custom-cursor"></div>
+<div id="net-status">Сеть: --</div>
 
 <!-- ЭКРАН МЕНЮ / ЛОББИ -->
 <div id="menu-screen">
@@ -171,7 +186,7 @@ let myNickname = localStorage.getItem('mp_nickname') || 'Survivor' + Math.floor(
 
 let currentRoomId = null;
 let inGame = false;
-let isMultiplayer = false; // Флаг режима
+let isMultiplayerActive = false; // Флаг: реально ли работает сеть?
 
 let myPlayer = { x: 100, y: 100, xp: 0, hp: 100, color: '#ffffcc', name: myNickname };
 let otherPlayers = {}; 
@@ -205,7 +220,8 @@ const els = {
     xpDisplay: document.getElementById('ui-xp'),
     hpDisplay: document.getElementById('ui-hp'),
     modeDisplay: document.getElementById('ui-mode'),
-    customCursor: document.getElementById('custom-cursor')
+    customCursor: document.getElementById('custom-cursor'),
+    netStatus: document.getElementById('net-status')
 };
 
 let ctx = els.canvas.getContext('2d');
@@ -221,7 +237,7 @@ els.nicknameInput.addEventListener('change', (e) => {
 window.addEventListener('load', () => {
     setTimeout(() => {
         if (!window.FB_DB) {
-            setStatus("⚠️ Firebase не загружен. Доступен только Offline режим.");
+            setStatus("⚠️ Firebase не загружен. Только Offline.");
             els.btnCreate.disabled = true;
             els.btnJoin.disabled = true;
         } else {
@@ -270,14 +286,14 @@ els.btnCopyLink.onclick = () => {
 
 // --- ЛОГИКА ЗАПУСКА ИГРЫ ---
 
-// 1. SINGLE PLAYER (ГАРАНТИРОВАННЫЙ СТАРТ)
+// 1. SINGLE PLAYER
 els.btnPlaySingle.onclick = () => {
-    isMultiplayer = false;
+    isMultiplayerActive = false;
     currentRoomId = null;
     startGameCore();
 };
 
-// 2. MULTIPLAYER CREATE
+// 2. MULTIPLAYER CREATE (РОБУСТНЫЙ ВАРИАНТ)
 els.btnCreate.onclick = async () => {
     if (!window.FB_DB) return showError("Firebase не загружен");
     
@@ -291,30 +307,30 @@ els.btnCreate.onclick = async () => {
     let roomId = '';
     for(let i=0; i<6; i++) roomId += chars.charAt(Math.floor(Math.random() * chars.length));
     
+    // Запускаем игру СРАЗУ, чтобы пользователь увидел интерфейс
+    isMultiplayerActive = true; // Предполагаем успех
+    currentRoomId = roomId;
+    startGameCore();
+
+    // Теперь пробуем создать комнату в базе. Если упадет - переключимся на Single Mode внутри игры
     try {
         await window.FB_FUNCS.setDoc(window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", roomId), {
             createdAt: window.FB_FUNCS.serverTimestamp(), hostId: myId, status: "open"
         });
         
-        isMultiplayer = true;
-        currentRoomId = roomId;
-        startGameCore();
+        // Успех! Регистрируем себя и слушаем других
+        registerSelfInRoom();
+        listenToPlayersInRoom();
+        listenToOrbsInRoom();
         
-        // Регистрация в фоне (не блокируем старт)
-        registerSelfInRoom().catch(err => {
-            console.warn("Reg failed, switching to Single Player logic locally:", err);
-            // Если регистрация упала, мы просто остаемся в мультиплеере визуально, но другие нас не увидят
-        });
-
+        setNetStatus("ONLINE", "ok");
+        
     } catch (e) {
-        console.error(e);
-        if (e.code === 'permission-denied') {
-            showError("❌ ДОСТУП ЗАПРЕЩЕН! Переключаюсь в Offline режим.");
-            isMultiplayer = false;
-            startGameCore(); // Запускаем оффлайн, чтобы игра работала
-        } else {
-            showError("Ошибка создания: " + e.message);
-        }
+        console.error("Create Room Failed:", e);
+        // Ошибка! Переключаемся в режим "Solo with Fake Multiplayer UI"
+        isMultiplayerActive = false;
+        setNetStatus("ERROR: SOLO MODE", "bad");
+        showError("Не удалось создать комнату. Играете в одиночку.");
     }
 };
 
@@ -328,13 +344,24 @@ els.btnJoin.onclick = () => {
     myPlayer.name = myNickname;
     localStorage.setItem('mp_nickname', myNickname);
     
-    isMultiplayer = true;
+    isMultiplayerActive = true;
     currentRoomId = val;
     startGameCore();
-    registerSelfInRoom().catch(console.warn);
+
+    // Пробуем подключиться
+    registerSelfInRoom().then(() => {
+        listenToPlayersInRoom();
+        listenToOrbsInRoom();
+        setNetStatus("CONNECTED", "ok");
+    }).catch(err => {
+        console.error("Join Failed:", err);
+        isMultiplayerActive = false;
+        setNetStatus("JOIN FAILED: SOLO", "bad");
+        showError("Не удалось войти. Играете в одиночку.");
+    });
 };
 
-// ОБЩИЙ ДВИЖОК ИГРЫ (Запускается всегда)
+// ОБЩИЙ ДВИЖОК ИГРЫ
 function startGameCore() {
     history.replaceState(null, "", currentRoomId ? `?room=${currentRoomId}` : window.location.pathname);
     
@@ -350,21 +377,24 @@ function startGameCore() {
     els.ui.style.display = 'block';
     els.hint.style.display = 'block';
     els.customCursor.style.display = 'block';
+    els.netStatus.style.display = 'block';
     
-    els.modeDisplay.textContent = isMultiplayer ? "MULTIPLAYER" : "SINGLE PLAYER";
+    els.modeDisplay.textContent = isMultiplayerActive ? "MULTIPLAYER" : "SINGLE PLAYER";
     els.roomIdDisplay.textContent = currentRoomId || "--";
     els.countDisplay.textContent = "1";
-    
-    // Инициализация сетей ТОЛЬКО если это мультиплеер и есть база
-    if (isMultiplayer && window.FB_DB) {
-        listenToPlayersInRoom();
-        listenToOrbsInRoom();
-    }
     
     spawnMonstersInitial();
     
     lastFrameTime = performance.now();
     requestAnimationFrame(gameLoop);
+}
+
+function setNetStatus(msg, type) {
+    els.netStatus.textContent = msg;
+    els.netStatus.className = "";
+    if(type === 'ok') els.netStatus.classList.add('net-ok');
+    else if(type === 'warn') els.netStatus.classList.add('net-warn');
+    else els.netStatus.classList.add('net-bad');
 }
 
 async function registerSelfInRoom() {
@@ -376,6 +406,7 @@ async function registerSelfInRoom() {
 }
 
 function listenToPlayersInRoom() {
+    if(!isMultiplayerActive) return;
     const colRef = window.FB_FUNCS.collection(window.FB_DB, "test_lobbies", currentRoomId, "players");
     unsubscribeRoom = window.FB_FUNCS.onSnapshot(colRef, (snapshot) => {
         const currentOtherPlayers = {};
@@ -396,13 +427,14 @@ function listenToPlayersInRoom() {
         els.countDisplay.textContent = Object.keys(otherPlayers).length + 1;
     }, (err) => {
         console.error("Net Err:", err);
-        // При ошибке сети переключаемся в визуальный single player, но не выходим из игры резко
-        isMultiplayer = false; 
+        isMultiplayerActive = false; 
         els.modeDisplay.textContent = "SINGLE (NET ERR)";
+        setNetStatus("DISCONNECTED", "bad");
     });
 }
 
 function listenToOrbsInRoom() {
+    if(!isMultiplayerActive) return;
     const colRef = window.FB_FUNCS.collection(window.FB_DB, "test_lobbies", currentRoomId, "orbs");
     unsubscribeOrbs = window.FB_FUNCS.onSnapshot(colRef, (snap) => {
         localOrbs = [];
@@ -414,7 +446,7 @@ function listenToOrbsInRoom() {
 
     if(orbSpawnInterval) clearInterval(orbSpawnInterval);
     orbSpawnInterval = setInterval(async () => {
-        if (!inGame || !window.FB_DB || !isMultiplayer) return;
+        if (!inGame || !window.FB_DB || !isMultiplayerActive) return;
         if (localOrbs.length < 10) {
             const rx = 50 + Math.random() * (MAP_COLS * TILE_SIZE - 100);
             const ry = 50 + Math.random() * (MAP_ROWS * TILE_SIZE - 100);
@@ -451,7 +483,7 @@ function spawnMonster() {
 }
 
 async function syncPosition() {
-    if (!inGame || !isMultiplayer || !window.FB_DB) return;
+    if (!inGame || !isMultiplayerActive || !window.FB_DB) return;
     const now = Date.now();
     if (now - lastSyncTime < SYNC_INTERVAL_MS) return;
     lastSyncTime = now;
@@ -463,7 +495,7 @@ async function syncPosition() {
 
 async function collectOrb(id) {
     if (!inGame) return;
-    if (isMultiplayer && window.FB_DB) {
+    if (isMultiplayerActive && window.FB_DB) {
         const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "orbs", id);
         await window.FB_FUNCS.deleteDoc(ref).catch(e => {});
     }
@@ -493,7 +525,7 @@ function leaveRoom() {
     if (orbSpawnInterval) clearInterval(orbSpawnInterval);
     if (monsterSpawnInterval) clearInterval(monsterSpawnInterval);
     
-    if (isMultiplayer && window.FB_DB && currentRoomId) {
+    if (isMultiplayerActive && window.FB_DB && currentRoomId) {
         const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "players", myId);
         window.FB_FUNCS.deleteDoc(ref).catch(()=>{});
     }
@@ -504,6 +536,7 @@ function leaveRoom() {
     els.ui.style.display = 'none';
     els.hint.style.display = 'none';
     els.customCursor.style.display = 'none';
+    els.netStatus.style.display = 'none';
     setStatus("");
 }
 
@@ -747,7 +780,7 @@ function showError(msg) {
 }
 
 window.addEventListener('beforeunload', () => {
-    if (inGame && isMultiplayer && window.FB_DB && currentRoomId) {
+    if (inGame && isMultiplayerActive && window.FB_DB && currentRoomId) {
         const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "players", myId);
         window.FB_FUNCS.deleteDoc(ref);
     }
