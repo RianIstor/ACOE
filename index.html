@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Precision Click Game: Fixed Online Flow</title>
+    <title>Precision Click Game: Fixed Navigation</title>
     
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { 
             getFirestore, collection, addDoc, doc, updateDoc, onSnapshot, 
-            query, where, limit, serverTimestamp, runTransaction, getDocs, deleteDoc
+            query, where, limit, serverTimestamp, runTransaction, getDocs, deleteDoc, getDoc
         } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-        // Конфиг твоего проекта
         const firebaseConfig = {
             apiKey: "AIzaSyDVV5jIHsH4CS1_utz1thzgJ2c04kxV7AM",
             authDomain: "sergey-game.firebaseapp.com",
@@ -33,22 +32,18 @@
             console.error("❌ Firebase Error:", e);
         }
 
-        // Глобальная ссылка для доступа из обычного JS
         window.fbDb = db;
-        window.fbFunctions = { collection, addDoc, doc, updateDoc, onSnapshot, query, where, limit, serverTimestamp, runTransaction, getDocs, deleteDoc };
+        window.fbFunctions = { collection, addDoc, doc, updateDoc, onSnapshot, query, where, limit, serverTimestamp, runTransaction, getDocs, deleteDoc, getDoc };
     </script>
 
     <style>
-        /* ... ВСЕ ТВОИ СТАРЫЕ СТИЛИ ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ ... */
+        /* ... СТИЛИ БЕЗ ИЗМЕНЕНИЙ (КОПИЯ ИЗ ПРЕДЫДУЩЕГО ОТВЕТА) ... */
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; cursor: none !important; user-select: none; -webkit-user-select: none; }
         html, body { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; color: #FFF; }
-
         #virtual-screen { position: absolute; width: 1920px; height: 1080px; background-color: #050505; transform-origin: center center; overflow: hidden; }
         #cursor { position: absolute; top: 0; left: 0; background-color: #FFF; pointer-events: none; z-index: 9999; border-radius: 50%; mix-blend-mode: difference; will-change: transform; }
-
         #game-area { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; z-index: 10; }
         
-        /* Профиль в меню */
         #profile-widget { position: absolute; top: 20px; left: 20px; display: flex; align-items: center; gap: 15px; z-index: 150; pointer-events: auto; background: rgba(20,20,20,0.8); padding: 10px 15px; border-radius: 8px; border: 1px solid #333; backdrop-filter: blur(5px); }
         .avatar-container { position: relative; width: 50px; height: 50px; border-radius: 50%; overflow: hidden; border: 2px solid #555; cursor: pointer !important; transition: border-color 0.2s; }
         .avatar-container:hover { border-color: #FFF; }
@@ -63,19 +58,10 @@
         .stats-row { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #888; margin-top: 2px; }
         #level-display-profile { color: #FFD700; font-weight: bold; }
 
-        /* HUD (Во время игры) */
         #hud { position: absolute; top: 0; left: 0; width: 1920px; z-index: 100; pointer-events: none; opacity: 0; transition: opacity 0.3s; padding-top: 30px; }
-        
-        /* Мини-профиль в игре */
-        #in-game-profile {
-            position: absolute; top: 20px; left: 20px;
-            display: flex; align-items: center; gap: 10px;
-            background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 20px;
-            border: 1px solid #444; pointer-events: none;
-        }
+        #in-game-profile { position: absolute; top: 20px; left: 20px; display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 20px; border: 1px solid #444; pointer-events: none; }
         #ig-avatar { width: 30px; height: 30px; border-radius: 50%; border: 1px solid #fff; object-fit: cover; }
         #ig-nick { font-size: 14px; color: #fff; font-weight: bold; }
-
         #timer-display { position: absolute; top: 25px; left: 50%; transform: translateX(-50%); font-size: 36px; font-weight: bold; color: #FFF; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
         #status-msg { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); font-size: 20px; color: #FFD700; min-height: 24px; text-align: center; width: 600px; }
         #mode-indicator { position: absolute; top: 25px; right: 40px; font-size: 20px; letter-spacing: 2px; padding: 5px 15px; border-radius: 4px; border: 2px solid #333; }
@@ -88,35 +74,18 @@
         #sens-indicator { font-size: 14px; color: #0F0; letter-spacing: 1px; opacity: 0; transition: opacity 0.3s; text-shadow: 0 0 5px rgba(0,255,0,0.3); }
         #fps-counter { font-size: 12px; color: #444; }
 
-        /* Нижнее меню */
         #bottom-menu { position: absolute; bottom: 0; left: 0; width: 1920px; height: 120px; background: linear-gradient(to top, #000, #111); border-top: 2px solid #222; display: flex; justify-content: center; align-items: center; gap: 20px; z-index: 200; transition: transform 0.3s ease, opacity 0.3s ease; }
         #bottom-menu.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
         
         .menu-btn { background: transparent; border: 2px solid #333; color: #888; padding: 15px 30px; font-family: inherit; font-size: 20px; transition: all 0.3s; text-transform: uppercase; letter-spacing: 2px; outline: none; border-radius: 4px; pointer-events: auto; white-space: nowrap; }
         .menu-btn:hover { border-color: #FFF; color: #FFF; box-shadow: 0 0 20px rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); }
         
-        #btn-inventory:hover { border-color: #0AF; color: #0AF; box-shadow: 0 0 15px rgba(0,170,255,0.2); }
-        #btn-shop:hover { border-color: #FFD700; color: #FFD700; box-shadow: 0 0 15px rgba(255,215,0,0.2); }
-
         #intro-overlay { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; justify-content: center; align-items: center; z-index: 50; pointer-events: none; }
         #big-start-circle { width: 400px; height: 400px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); pointer-events: auto; position: relative; box-shadow: 0 0 50px rgba(255,255,255,0.05); }
         #big-start-circle::after { content: "CLICK TO START"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; color: rgba(255,255,255,0.7); pointer-events: none; white-space: nowrap; letter-spacing: 3px; }
 
-        /* Новый оверлей готовности */
-        #ready-overlay { 
-            position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; 
-            display: none; justify-content: center; align-items: center; 
-            z-index: 60; pointer-events: none; background: rgba(0,0,0,0.8);
-        }
-        #ready-circle { 
-            width: 300px; height: 300px; border-radius: 50%; 
-            border: 4px solid #DA70D6; 
-            pointer-events: auto; 
-            display: flex; justify-content: center; align-items: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            box-shadow: 0 0 30px rgba(218,112,214,0.3);
-        }
+        #ready-overlay { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; justify-content: center; align-items: center; z-index: 60; pointer-events: none; background: rgba(0,0,0,0.8); }
+        #ready-circle { width: 300px; height: 300px; border-radius: 50%; border: 4px solid #DA70D6; pointer-events: auto; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; box-shadow: 0 0 30px rgba(218,112,214,0.3); }
         #ready-circle:hover { background: rgba(218,112,214,0.1); transform: scale(1.05); }
         #ready-text { font-size: 24px; color: #DA70D6; font-weight: bold; letter-spacing: 2px; }
 
@@ -127,23 +96,14 @@
         .grade-miss { border-color: #F00 !important; box-shadow: 0 0 30px rgba(255,0,0,0.5); }
 
         .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15,15,15,0.98); backdrop-filter: blur(15px); border: 2px solid #333; padding: 50px; z-index: 500; width: 700px; max-height: 800px; overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,0.9); border-radius: 12px; }
-        .modal::-webkit-scrollbar { width: 8px; } .modal::-webkit-scrollbar-track { bg: #111; } .modal::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
         .modal h2 { text-align: center; margin-bottom: 20px; color: #FFF; letter-spacing: 5px; font-size: 32px; font-weight: normal; border-bottom: 2px solid #222; padding-bottom: 25px; }
         
-        /* Переключатель режима (Offline/Online) */
-        .main-mode-selector {
-            display: flex; justify-content: center; gap: 20px; margin-bottom: 30px;
-        }
-        .main-tab {
-            padding: 15px 40px; border: 2px solid #333; background: transparent;
-            color: #666; font-family: inherit; font-size: 24px; cursor: pointer;
-            transition: all 0.2s; border-radius: 8px; text-transform: uppercase; letter-spacing: 2px;
-        }
+        .main-mode-selector { display: flex; justify-content: center; gap: 20px; margin-bottom: 30px; }
+        .main-tab { padding: 15px 40px; border: 2px solid #333; background: transparent; color: #666; font-family: inherit; font-size: 24px; cursor: pointer; transition: all 0.2s; border-radius: 8px; text-transform: uppercase; letter-spacing: 2px; }
         .main-tab.active-offline { border-color: #0F0; color: #0F0; background: rgba(0,255,0,0.1); box-shadow: 0 0 15px rgba(0,255,0,0.2); }
         .main-tab.active-online { border-color: #DA70D6; color: #DA70D6; background: rgba(218,112,214,0.1); box-shadow: 0 0 15px rgba(218,112,214,0.2); }
         .main-tab:hover:not(.active-offline):not(.active-online) { border-color: #555; color: #AAA; }
 
-        /* Табы сложности (для офлайна и онлайна) */
         .mode-selector { display: flex; justify-content: center; gap: 15px; margin-bottom: 30px; }
         .mode-tab { padding: 10px 20px; border: 2px solid #333; background: transparent; color: #666; font-family: inherit; font-size: 16px; cursor: pointer; transition: all 0.2s; border-radius: 4px; }
         .mode-tab.active-normal { border-color: #0F0; color: #0F0; background: rgba(0,255,0,0.1); box-shadow: 0 0 10px rgba(0,255,0,0.2); }
@@ -194,7 +154,6 @@
         #result-stats { font-size: 22px; color: #888; margin-bottom: 60px; line-height: 2; letter-spacing: 2px; }
         .btn-group { display: flex; gap: 25px; }
 
-        /* Стили онлайна */
         .server-list { display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto; }
         .server-card { background: #222; border: 1px solid #444; padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; }
         .server-card:hover { border-color: #DA70D6; background: #2a2a2a; }
@@ -211,7 +170,6 @@
         .rank-2 { color: #C0C0C0; }
         .rank-3 { color: #CD7F32; }
 
-        /* Кроп стили */
         #crop-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1a1a1a; border: 2px solid #444; padding: 30px; z-index: 1000; border-radius: 12px; box-shadow: 0 0 50px rgba(0,0,0,0.8); width: 600px; text-align: center; }
         #crop-canvas-container { position: relative; width: 400px; height: 400px; margin: 0 auto 20px auto; background: #000; border-radius: 50%; overflow: hidden; border: 2px solid #555; cursor: grab; }
         #crop-canvas-container:active { cursor: grabbing; }
@@ -238,7 +196,6 @@
     <div id="virtual-screen">
         <div id="cursor"></div>
         
-        <!-- ВИДЖЕТ ПРОФИЛЯ (Меню) -->
         <div id="profile-widget">
             <div class="avatar-container" id="avatar-trigger">
                 <img id="user-avatar-img" src="" alt="" style="display:none;">
@@ -264,7 +221,6 @@
         </div>
 
         <div id="hud">
-            <!-- Мини-профиль в игре -->
             <div id="in-game-profile">
                 <img id="ig-avatar" src="" alt="">
                 <span id="ig-nick">Player</span>
@@ -276,15 +232,12 @@
         
         <div id="game-area"></div>
         <div id="intro-overlay"><div id="big-start-circle"></div></div>
-        
-        <!-- НОВЫЙ ОВЕРЛЕЙ ГОТОВНОСТИ -->
         <div id="ready-overlay">
             <div id="ready-circle">
                 <span id="ready-text">READY?</span>
             </div>
         </div>
 
-        <!-- ГЛАВНОЕ МЕНЮ -->
         <div id="bottom-menu">
             <button class="menu-btn" id="btn-play">ИГРАТЬ</button>
             <button class="menu-btn" id="btn-settings">НАСТРОЙКИ</button>
@@ -293,7 +246,7 @@
             <button class="menu-btn" id="btn-exit">ВЫХОД</button>
         </div>
 
-        <!-- МОДАЛКА ВЫБОРА РЕЖИМА (OFFLINE/ONLINE) -->
+        <!-- МОДАЛКА ВЫБОРА РЕЖИМА -->
         <div id="mode-choice-modal" class="modal">
             <h2>РЕЖИМ ИГРЫ</h2>
             <div class="main-mode-selector">
@@ -302,6 +255,7 @@
             </div>
             <p style="text-align:center; color:#666; margin-bottom:20px;" id="mode-desc">Классические уровни и прогресс.</p>
             <button class="menu-btn close-modal-btn" id="btn-confirm-mode">ДАЛЕЕ</button>
+            <button class="menu-btn close-modal-btn" id="btn-back-from-mode" style="margin-top:10px; border-color:#555;">НАЗАД В МЕНЮ</button>
         </div>
 
         <!-- МОДАЛКА НАСТРОЕК -->
@@ -312,10 +266,6 @@
                 <div class="control-row">
                     <input type="range" id="sens-slider" min="1.00" max="2.25" step="0.05">
                     <span id="sens-val" class="volume-val">1.00x</span>
-                </div>
-                <div class="checkbox-row disabled">
-                    <div class="custom-checkbox checked"></div>
-                    <span class="checkbox-label">Применять только во время игры</span>
                 </div>
             </div>
             <div class="setting-group">
@@ -352,7 +302,7 @@
             <button class="menu-btn close-modal-btn" id="btn-close-settings">ЗАКРЫТЬ</button>
         </div>
 
-        <!-- МОДАЛКА УРОВНЕЙ (ОФЛАЙН И ОНЛАЙН) -->
+        <!-- МОДАЛКА УРОВНЕЙ -->
         <div id="level-select-modal" class="modal">
             <h2>ВЫБОР УРОВНЯ</h2>
             <div class="mode-selector">
@@ -361,12 +311,23 @@
                 <button class="mode-tab locked" id="tab-hard">🔴 СЛОЖНЫЙ</button>
             </div>
             <div class="level-list" id="level-list-container"></div>
-            <button class="menu-btn close-modal-btn" id="btn-close-levels">ОТМЕНА</button>
+            <button class="menu-btn close-modal-btn" id="btn-close-levels">НАЗАД</button>
         </div>
 
-        <!-- МОДАЛКА СОЗДАНИЯ СЕРВЕРА (ОНЛАЙН) -->
+        <!-- МОДАЛКА ДЕЙСТВИЙ ОНЛАЙН (СОЗДАТЬ/НАЙТИ) -->
+        <div id="online-action-modal" class="modal">
+            <h2>ОНЛАЙН РЕЖИМ</h2>
+            <p style="text-align:center; color:#888; margin-bottom:30px;">Уровень: <span id="action-level-info" style="color:#DA70D6;">1</span> | Сложность: <span id="action-diff-info" style="color:#DA70D6;">Normal</span></p>
+            <div style="display:flex; flex-direction:column; gap:15px;">
+                <button class="menu-btn" id="btn-go-create" style="border-color:#DA70D6; color:#DA70D6;">СОЗДАТЬ КОМНАТУ</button>
+                <button class="menu-btn" id="btn-go-find" style="border-color:#0AF; color:#0AF;">НАЙТИ СЕРВЕРЫ</button>
+            </div>
+            <button class="menu-btn close-modal-btn" id="btn-back-from-action" style="margin-top:20px;">НАЗАД К УРОВНЯМ</button>
+        </div>
+
+        <!-- МОДАЛКА СОЗДАНИЯ СЕРВЕРА -->
         <div id="create-server-modal" class="modal">
-            <h2>СОЗДАНИЕ КОМНАТЫ</h2>
+            <h2>НАСТРОЙКИ КОМНАТЫ</h2>
             <div class="setting-group">
                 <label class="setting-label">Название комнаты</label>
                 <input type="text" id="server-name-input" placeholder="My Room" style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white;">
@@ -378,28 +339,24 @@
                     <span id="server-duration-val" class="volume-val">30s</span>
                 </div>
             </div>
-            <div class="setting-group" style="border:none; padding-bottom:0;">
-                <label class="setting-label">Выбранный уровень</label>
-                <div id="selected-level-info" style="color:#DA70D6; font-size:18px; text-align:center;">Level 1 (Normal)</div>
-            </div>
             <button class="menu-btn close-modal-btn" id="btn-cancel-create">ОТМЕНА</button>
             <button class="menu-btn btn-primary" style="background:#DA70D6; color:black; margin-top:10px;" id="btn-confirm-create">СОЗДАТЬ</button>
         </div>
 
-        <!-- МОДАЛКА СПИСКА СЕРВЕРОВ (ОНЛАЙН) -->
+        <!-- МОДАЛКА СПИСКА СЕРВЕРОВ -->
         <div id="online-server-modal" class="modal">
             <h2>СПИСОК КОМНАТ</h2>
             <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
-                <button class="menu-btn" style="padding:10px 20px; font-size:16px;" id="btn-back-to-levels">НАЗАД К УРОВНЯМ</button>
+                <button class="menu-btn" style="padding:10px 20px; font-size:16px;" id="btn-back-to-action">НАЗАД</button>
                 <button class="menu-btn" style="padding:10px 20px; font-size:16px;" id="btn-refresh-servers">ОБНОВИТЬ</button>
             </div>
             <div class="server-list" id="server-list-container">
                 <div class="empty-text">Нет активных серверов...</div>
             </div>
-            <button class="menu-btn close-modal-btn" id="btn-close-online">ВЫЙТИ</button>
+            <button class="menu-btn close-modal-btn" id="btn-close-online">В ГЛАВНОЕ МЕНЮ</button>
         </div>
 
-        <!-- МОДАЛКА ЛОББИ (ОНЛАЙН) -->
+        <!-- МОДАЛКА ЛОББИ -->
         <div id="lobby-modal" class="modal">
             <h2>ЛОББИ</h2>
             <div style="text-align:center; margin-bottom:20px;">
@@ -408,7 +365,6 @@
                 <p style="color:#DA70D6; font-size:14px; margin-top:10px;" id="lobby-status-text">Ожидание игроков...</p>
             </div>
             <ul class="players-list" id="lobby-players-list" style="list-style:none; margin-bottom:20px;"></ul>
-            <!-- Кнопка старта для хоста -->
             <button class="menu-btn btn-primary" id="btn-host-start" style="display:none; background:#DA70D6; color:black;">НАЧАТЬ ИГРУ</button>
             <button class="menu-btn btn-danger" id="btn-leave-lobby">ВЫЙТИ</button>
         </div>
@@ -436,7 +392,6 @@
             </div>
         </div>
 
-        <!-- Инвентарь/Магазин (без изменений) -->
         <div id="inventory-modal" class="modal">
             <h2>ИНВЕНТАРЬ</h2>
             <div class="item-grid" id="inventory-grid"><div class="empty-text">Инвентарь пуст</div></div>
@@ -449,7 +404,6 @@
         </div>
     </div>
 
-    <!-- Модалка кропа -->
     <div id="crop-modal">
         <h2 style="border:none; margin-bottom:20px;">ОБРЕЗКА АВАТАРА</h2>
         <div id="crop-canvas-container"><canvas id="crop-canvas" width="400" height="400"></canvas></div>
@@ -460,7 +414,7 @@
     </div>
 
 <script>
-// --- БАЗОВАЯ ЛОГИКА (КУРСОР, РЕСАЙЗ, АУДИО, ПРОФИЛЬ) ---
+// --- БАЗОВАЯ ЛОГИКА ---
 const VIRTUAL_WIDTH = 1920;
 const VIRTUAL_HEIGHT = 1080;
 let currentScale = 1;
@@ -497,24 +451,35 @@ const els = {
     cropModal: document.getElementById('crop-modal'), cropCanvas: document.getElementById('crop-canvas'), zoomSlider: document.getElementById('zoom-slider'), btnConfirmCrop: document.getElementById('btn-confirm-crop'),
     tabNormal: document.getElementById('tab-normal'), tabMedium: document.getElementById('tab-medium'), tabHard: document.getElementById('tab-hard'),
     btnInventory: document.getElementById('btn-inventory'), btnShop: document.getElementById('btn-shop'), inventoryModal: document.getElementById('inventory-modal'), shopModal: document.getElementById('shop-modal'), btnCloseInventory: document.getElementById('btn-close-inventory'), btnCloseShop: document.getElementById('btn-close-shop'), inventoryGrid: document.getElementById('inventory-grid'), shopGrid: document.getElementById('shop-grid'),
-    // Новые элементы
+    
+    // Новые элементы навигации
     modeChoiceModal: document.getElementById('mode-choice-modal'),
     tabOffline: document.getElementById('tab-offline'),
     tabOnline: document.getElementById('tab-online'),
     modeDesc: document.getElementById('mode-desc'),
     btnConfirmMode: document.getElementById('btn-confirm-mode'),
+    btnBackFromMode: document.getElementById('btn-back-from-mode'),
+    
+    onlineActionModal: document.getElementById('online-action-modal'),
+    actionLevelInfo: document.getElementById('action-level-info'),
+    actionDiffInfo: document.getElementById('action-diff-info'),
+    btnGoCreate: document.getElementById('btn-go-create'),
+    btnGoFind: document.getElementById('btn-go-find'),
+    btnBackFromAction: document.getElementById('btn-back-from-action'),
+
     onlineServerModal: document.getElementById('online-server-modal'),
     serverListContainer: document.getElementById('server-list-container'),
-    btnBackToLevels: document.getElementById('btn-back-to-levels'),
+    btnBackToAction: document.getElementById('btn-back-to-action'),
     btnRefreshServers: document.getElementById('btn-refresh-servers'),
     btnCloseOnline: document.getElementById('btn-close-online'),
+    
     createServerModal: document.getElementById('create-server-modal'),
     serverNameInput: document.getElementById('server-name-input'),
     serverDurationSlider: document.getElementById('server-duration-slider'),
     serverDurationVal: document.getElementById('server-duration-val'),
-    selectedLevelInfo: document.getElementById('selected-level-info'),
     btnCancelCreate: document.getElementById('btn-cancel-create'),
     btnConfirmCreate: document.getElementById('btn-confirm-create'),
+    
     lobbyModal: document.getElementById('lobby-modal'),
     lobbyRoomName: document.getElementById('lobby-room-name'),
     lobbyPlayerCount: document.getElementById('lobby-player-count'),
@@ -522,6 +487,7 @@ const els = {
     lobbyStatusText: document.getElementById('lobby-status-text'),
     btnHostStart: document.getElementById('btn-host-start'),
     btnLeaveLobby: document.getElementById('btn-leave-lobby'),
+    
     onlineResultsScreen: document.getElementById('online-results-screen'),
     onlineLeaderboard: document.querySelector('#online-leaderboard tbody'),
     btnBackToMainFromRes: document.getElementById('btn-back-to-main-from-res'),
@@ -534,17 +500,17 @@ const MIN_CIRCLE_GAP = 30;
 
 let userSettings = loadSettings();
 let userProfile = loadProfile();
-let selectedMainMode = 'offline'; // 'offline' or 'online'
-let selectedDifficulty = 'normal'; // For offline levels AND online room config
-let pendingOnlineLevel = 1; // Level chosen for online match
+let selectedMainMode = 'offline';
+let selectedDifficulty = 'normal';
+let pendingOnlineLevel = 1;
 
-// Audio & Crop logic copied from previous version...
+// Audio
 let audioCtx = null;
 function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
 function playSfx(freq, type, dur, vol) { if (!userSettings.soundEnabled || !audioCtx) return; const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.type = type; o.frequency.value = freq; const v = (userSettings.volume/100) * vol; g.gain.setValueAtTime(v, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + dur); }
 const SFX = { fast: () => playSfx(1200, 'sine', 0.08, 0.3), med: () => playSfx(800, 'triangle', 0.12, 0.3), slow: () => playSfx(400, 'sine', 0.2, 0.2), miss: () => { playSfx(150, 'sawtooth', 0.3, 0.4); playSfx(158, 'sawtooth', 0.3, 0.4); }, start: () => playSfx(600, 'sine', 0.4, 0.3), levelUp: () => { playSfx(800,'sine',0.1,0.2); setTimeout(()=>playSfx(1200,'sine',0.2,0.2),100); } };
 
-// Profile Logic
+// Profile
 function loadProfile() { const s = localStorage.getItem('pcg_profile_v1'); const d = { nickname: '', avatarData: null, xp: 0, inventory: [], currency: 0 }; if (s) { const p = JSON.parse(s); return { ...d, ...p }; } return d; }
 function saveProfile() { localStorage.setItem('pcg_profile_v1', JSON.stringify(userProfile)); updateProfileUI(); }
 function calculateLevel(xp) { if (xp <= 0) return 1; return Math.floor(Math.sqrt(xp / 10)) + 1; }
@@ -555,15 +521,12 @@ function updateProfileUI() {
     if (userProfile.avatarData) { els.avatarImg.src = userProfile.avatarData; els.avatarImg.style.display = 'block'; els.avatarPlaceholder.style.display = 'none'; } else { els.avatarImg.style.display = 'none'; els.avatarPlaceholder.style.display = 'flex'; }
     const cl = calculateLevel(userProfile.xp); const plx = getXpForLevel(cl); const nlx = getXpForLevel(cl + 1); const pip = userProfile.xp - plx; const tn = nlx - plx; const per = tn > 0 ? (pip / tn) * 100 : 100;
     els.levelText.textContent = `LVL ${cl}`; els.xpText.textContent = `${userProfile.xp} / ${nlx} XP`; els.xpFill.style.width = `${per}%`;
-    
-    // Update In-Game Profile
-    if (userProfile.avatarData) els.igAvatar.src = userProfile.avatarData;
-    else els.igAvatar.src = ''; 
+    if (userProfile.avatarData) els.igAvatar.src = userProfile.avatarData; else els.igAvatar.src = ''; 
     els.igNick.textContent = userProfile.nickname || "Guest";
 }
 els.nicknameInput.oninput = (e) => { userProfile.nickname = e.target.value.trim(); clearTimeout(window.nickSaveTimeout); window.nickSaveTimeout = setTimeout(() => { saveProfile(); }, 500); };
 
-// Settings Logic
+// Settings - FIXED
 function loadSettings() { const s = localStorage.getItem('pcg_fixedres_v24'); return s ? JSON.parse(s) : { cursorSize: 10, sensitivity: 1.0, soundEnabled: true, volume: 50, fpsLimit: 144 }; }
 function saveSettings() { localStorage.setItem('pcg_fixedres_v24', JSON.stringify(userSettings)); applyCursorStyle(); }
 function applyCursorStyle() { 
@@ -575,7 +538,7 @@ function resetCursorToCenter() { virtualMouseX = VIRTUAL_WIDTH / 2; virtualMouse
 function syncCursorVisual() { els.cursor.style.transform = `translate(${virtualMouseX}px, ${virtualMouseY}px)`; }
 function updateSensIndicator() { if (state.phase === 'PLAYING' || state.phase === 'INTRO' || state.phase === 'ONLINE_PLAYING') { els.sensIndicator.style.opacity = '1'; els.sensIndicator.textContent = `SENS: ${userSettings.sensitivity.toFixed(2)}x`; els.sensIndicator.style.color = '#0F0'; } else { els.sensIndicator.style.opacity = '0'; } }
 
-// Mouse Input
+// Mouse
 let virtualMouseX = VIRTUAL_WIDTH / 2;
 let virtualMouseY = VIRTUAL_HEIGHT / 2;
 window.addEventListener('mousemove', e => { 
@@ -598,11 +561,7 @@ window.addEventListener('mousemove', e => {
 window.addEventListener('mousedown', e => {
     if (els.cropModal.style.display === 'block') return;
     if (e.button !== 0) return;
-    
-    // Handle clicks for both Offline and Online playing states
-    if (state.phase === 'PLAYING' || state.phase === 'ONLINE_PLAYING') {
-        handleTargetClick();
-    }
+    if (state.phase === 'PLAYING' || state.phase === 'ONLINE_PLAYING') handleTargetClick();
 });
 
 function handleTargetClick() {
@@ -616,26 +575,23 @@ function handleTargetClick() {
         if (dx*dx + dy*dy <= radius*radius) {
             t.dead = true; 
             state.stats.total++;
-            
-            if(state.phase === 'PLAYING') { // Only give XP in offline
+            if(state.phase === 'PLAYING') {
                 const oldLevel = calculateLevel(userProfile.xp);
                 addXp(1);
                 const newLevel = calculateLevel(userProfile.xp);
                 if (newLevel > oldLevel) SFX.levelUp();
             }
-
             const r = (performance.now() - t.spawnTime) / t.totalLife;
             if (r < 0.67) { t.el.classList.add('grade-fast'); state.stats.fast++; SFX.fast(); }
             else if (r < 0.85) { t.el.classList.add('grade-medium'); state.stats.med++; SFX.med(); }
             else { t.el.classList.add('grade-slow'); state.stats.slow++; SFX.slow(); }
-            
             setTimeout(() => { if (t.el.parentNode) t.el.remove(); const idx = state.targets.findIndex(tt => tt.id === t.id); if (idx > -1) state.targets.splice(idx, 1); }, 150);
             break;
         }
     }
 }
 
-// Keyboard
+// Keyboard & Navigation Logic - FIXED
 window.addEventListener('keydown', e => { 
     if (els.cropModal.style.display === 'block') {
         const key = e.key.toLowerCase();
@@ -644,17 +600,22 @@ window.addEventListener('keydown', e => {
         return;
     }
     if (e.key === 'Escape') { 
-        // FIX: Ensure proper cleanup when pressing ESC
-        if(['PLAYING','INTRO','ONLINE_PLAYING'].includes(state.phase)) { backToMainMenu(); return; }
-        if(state.phase === 'RESULTS') { backToMainMenu(); return; }
-        if(state.phase === 'LEVEL_SELECT') { closeLevelSelect(); return; }
-        if(state.phase === 'ONLINE_LOBBY') { leaveLobby(); return; }
+        // Priority order for closing modals
+        if(els.cropModal.style.display === 'block') { els.cropModal.style.display = 'none'; return; }
         if(els.inventoryModal.style.display === 'block') { els.inventoryModal.style.display = 'none'; return; }
         if(els.shopModal.style.display === 'block') { els.shopModal.style.display = 'none'; return; }
         if(els.settingsModal.style.display === 'block') { els.settingsModal.style.display = 'none'; return; }
-        if(els.modeChoiceModal.style.display === 'block') { els.modeChoiceModal.style.display = 'none'; return; }
-        if(els.onlineServerModal.style.display === 'block') { els.onlineServerModal.style.display = 'none'; return; }
-        if(els.createServerModal.style.display === 'block') { els.createServerModal.style.display = 'none'; return; }
+        
+        if(state.phase === 'ONLINE_LOBBY') { leaveLobby(); return; }
+        if(els.lobbyModal.style.display === 'block') { els.lobbyModal.style.display = 'none'; els.onlineServerModal.style.display = 'block'; return; }
+        if(els.onlineServerModal.style.display === 'block') { els.onlineServerModal.style.display = 'none'; els.onlineActionModal.style.display = 'block'; return; }
+        if(els.createServerModal.style.display === 'block') { els.createServerModal.style.display = 'none'; els.onlineActionModal.style.display = 'block'; return; }
+        if(els.onlineActionModal.style.display === 'block') { els.onlineActionModal.style.display = 'none'; els.levelModal.style.display = 'block'; return; }
+        if(els.levelModal.style.display === 'block') { els.levelModal.style.display = 'none'; els.modeChoiceModal.style.display = 'block'; return; }
+        if(els.modeChoiceModal.style.display === 'block') { els.modeChoiceModal.style.display = 'none'; els.bottomMenu.classList.remove('hidden'); return; }
+        
+        if(['PLAYING','INTRO','ONLINE_PLAYING'].includes(state.phase)) { backToMainMenu(); return; }
+        if(state.phase === 'RESULTS') { backToMainMenu(); return; }
         if(state.phase === 'MENU') { window.close(); }
     }
 });
@@ -669,13 +630,16 @@ els.btnRetry.onclick = () => startIntroSequence(state.currentLevel, state.curren
 els.btnNext.onclick = () => state.currentLevel < TOTAL_LEVELS ? startIntroSequence(state.currentLevel+1, state.currentMode) : backToMainMenu();
 els.btnBackMenu.onclick = backToMainMenu;
 
-// Mode Choice
+// Mode Choice Navigation
 els.tabOffline.onclick = () => { selectedMainMode = 'offline'; updateModeTabs(); };
 els.tabOnline.onclick = () => { selectedMainMode = 'online'; updateModeTabs(); };
 els.btnConfirmMode.onclick = () => {
     els.modeChoiceModal.style.display = 'none';
-    if(selectedMainMode === 'offline') openLevelSelect();
-    else openLevelSelect(); // Both go to same level selector now!
+    openLevelSelect();
+};
+els.btnBackFromMode.onclick = () => {
+    els.modeChoiceModal.style.display = 'none';
+    els.bottomMenu.classList.remove('hidden');
 };
 
 function updateModeTabs() {
@@ -690,7 +654,7 @@ function openModeChoice() {
     updateModeTabs();
 }
 
-// Offline Levels Logic
+// Levels Logic
 let playerProgress = loadProgress();
 function loadProgress() { const s = localStorage.getItem('pcg_prog_triple_size_only_v1'); return s ? JSON.parse(s) : { unlockedLevel: { normal: 1, medium: 1, hard: 1 }, ratings: { normal: {}, medium: {}, hard: {} } }; }
 function saveProgress() { localStorage.setItem('pcg_prog_triple_size_only_v1', JSON.stringify(playerProgress)); }
@@ -719,7 +683,12 @@ function openLevelSelect() {
     els.levelModal.style.display = 'block'; 
     resetCursorToCenter(); 
 }
-function closeLevelSelect() { state.phase = 'MENU'; els.levelModal.style.display = 'none'; els.bottomMenu.classList.remove('hidden'); resetCursorToCenter(); }
+
+// FIX: Back button in levels goes to Mode Choice
+els.btnCloseLevels.onclick = () => { 
+    els.levelModal.style.display = 'none'; 
+    els.modeChoiceModal.style.display = 'block'; 
+};
 
 function renderLevelList() {
     els.levelListContainer.innerHTML = '';
@@ -736,19 +705,344 @@ function renderLevelList() {
         let icon = '🟢'; if(selectedDifficulty === 'medium') icon = '🔵'; if(selectedDifficulty === 'hard') icon = '🔴';
         d.innerHTML=`<span class="level-name">${icon} УРОВЕНЬ ${i}</span>${sh}`;
         if(u) d.onclick = () => { 
-            closeLevelSelect(); 
             if(selectedMainMode === 'offline') {
+                els.levelModal.style.display = 'none';
                 startIntroSequence(i, selectedDifficulty);
             } else {
-                // Online flow: Go to Create Server modal with pre-selected level/difficulty
+                // Online flow: Show Action Modal (Create/Find)
                 pendingOnlineLevel = i;
-                openCreateServerModal();
+                els.levelModal.style.display = 'none';
+                els.onlineActionModal.style.display = 'block';
+                els.actionLevelInfo.textContent = i;
+                els.actionDiffInfo.textContent = selectedDifficulty.toUpperCase();
             }
         };
         els.levelListContainer.appendChild(d);
     }
 }
 
+// Online Action Modal Navigation
+els.btnBackFromAction.onclick = () => {
+    els.onlineActionModal.style.display = 'none';
+    els.levelModal.style.display = 'block';
+};
+
+els.btnGoCreate.onclick = () => {
+    els.onlineActionModal.style.display = 'none';
+    els.createServerModal.style.display = 'block';
+    els.serverDurationSlider.value = 30;
+    els.serverDurationVal.textContent = '30s';
+};
+
+els.btnGoFind.onclick = () => {
+    els.onlineActionModal.style.display = 'none';
+    els.onlineServerModal.style.display = 'block';
+    fetchServers();
+};
+
+// Create Server Modal Navigation
+els.btnCancelCreate.onclick = () => {
+    els.createServerModal.style.display = 'none';
+    els.onlineActionModal.style.display = 'block';
+};
+
+els.serverDurationSlider.oninput = (e) => {
+    els.serverDurationVal.textContent = e.target.value + 's';
+};
+
+els.btnConfirmCreate.onclick = async () => {
+    if (!window.fbDb) return alert("Firebase не подключен");
+    const name = els.serverNameInput.value.trim() || "Unnamed Room";
+    const duration = parseInt(els.serverDurationSlider.value);
+    
+    try {
+        const roomRef = await window.fbFunctions.addDoc(window.fbFunctions.collection(window.fbDb, "servers"), {
+            name: name,
+            hostId: myUserId,
+            duration: duration,
+            difficulty: selectedDifficulty,
+            level: pendingOnlineLevel,
+            status: "waiting",
+            players: [{ id: myUserId, nickname: userProfile.nickname || "Host", score: 0, accuracy: 0, ready: false }],
+            createdAt: window.fbFunctions.serverTimestamp()
+        });
+        enterLobby(roomRef.id);
+    } catch (err) {
+        console.error(err);
+        alert("Ошибка создания комнаты");
+    }
+};
+
+// Server List Modal Navigation
+els.btnBackToAction.onclick = () => {
+    els.onlineServerModal.style.display = 'none';
+    els.onlineActionModal.style.display = 'block';
+};
+
+els.btnCloseOnline.onclick = () => {
+    els.onlineServerModal.style.display = 'none';
+    backToMainMenu();
+};
+
+els.btnRefreshServers.onclick = () => {
+    fetchServers();
+};
+
+async function fetchServers() {
+    if (!window.fbDb) return;
+    els.serverListContainer.innerHTML = '<div class="empty-text">Загрузка и очистка старых комнат...</div>';
+    
+    try {
+        const q = window.fbFunctions.query(
+            window.fbFunctions.collection(window.fbDb, "servers"),
+            window.fbFunctions.where("status", "==", "waiting"),
+            window.fbFunctions.limit(20)
+        );
+        const snapshot = await window.fbFunctions.getDocs(q);
+        
+        const now = Date.now();
+        const oneMinute = 60 * 1000;
+        
+        els.serverListContainer.innerHTML = '';
+        let hasActive = false;
+
+        for (const docSnap of snapshot.docs) {
+            const data = docSnap.data();
+            const createdTime = data.createdAt ? data.createdAt.toMillis() : 0;
+            
+            // AUTO DELETE OLD ROOMS (> 1 min)
+            if (now - createdTime > oneMinute) {
+                await window.fbFunctions.deleteDoc(window.fbFunctions.doc(window.fbDb, "servers", docSnap.id));
+                continue;
+            }
+
+            hasActive = true;
+            const card = document.createElement('div');
+            card.className = 'server-card';
+            card.innerHTML = `
+                <div class="server-info">
+                    <div class="server-name">${data.name}</div>
+                    <div class="server-details">Lvl ${data.level} | ${data.difficulty} | ${data.duration}s | ${data.players.length}/4</div>
+                </div>
+                <button class="join-btn">ВОЙТИ</button>
+            `;
+            card.querySelector('.join-btn').onclick = () => joinServer(docSnap.id);
+            els.serverListContainer.appendChild(card);
+        }
+        
+        if (!hasActive) {
+            els.serverListContainer.innerHTML = '<div class="empty-text">Нет активных серверов</div>';
+        }
+    } catch (err) {
+        console.error(err);
+        els.serverListContainer.innerHTML = '<div class="empty-text">Ошибка загрузки</div>';
+    }
+}
+
+async function joinServer(roomId) {
+    if (!window.fbDb) return;
+    try {
+        await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
+            const ref = window.fbFunctions.doc(window.fbDb, "servers", roomId);
+            const snap = await transaction.get(ref);
+            if (!snap.exists()) throw new Error("Комната удалена");
+            
+            const data = snap.data();
+            if (data.players.length >= 4) throw new Error("Комната полная");
+            if (data.status !== "waiting") throw new Error("Игра началась");
+            
+            if (data.players.some(p => p.id === myUserId)) return;
+
+            const newPlayer = { id: myUserId, nickname: userProfile.nickname || "Guest", score: 0, accuracy: 0, ready: false };
+            transaction.update(ref, {
+                players: [...data.players, newPlayer]
+            });
+        });
+        enterLobby(roomId);
+    } catch (err) {
+        alert(err.message);
+        fetchServers();
+    }
+}
+
+function enterLobby(roomId) {
+    state.roomId = roomId;
+    state.phase = 'ONLINE_LOBBY';
+    els.onlineServerModal.style.display = 'none';
+    els.createServerModal.style.display = 'none';
+    els.onlineActionModal.style.display = 'none';
+    els.lobbyModal.style.display = 'block';
+    amReady = false;
+    listenToRoom(roomId);
+}
+
+function listenToRoom(roomId) {
+    if (currentRoomListener) currentRoomListener();
+    
+    const ref = window.fbFunctions.doc(window.fbDb, "servers", roomId);
+    currentRoomListener = window.fbFunctions.onSnapshot(ref, (docSnap) => {
+        if (!docSnap.exists()) {
+            alert("Комната закрыта");
+            leaveLobby();
+            return;
+        }
+        const data = docSnap.data();
+        state.players = data.players;
+        isHost = (data.hostId === myUserId);
+        
+        els.lobbyRoomName.textContent = data.name;
+        els.lobbyPlayerCount.textContent = `${data.players.length}/4`;
+        els.lobbyPlayersList.innerHTML = '';
+        data.players.forEach(p => {
+            const li = document.createElement('li');
+            li.style.cssText = "padding:5px; border-bottom:1px solid #333; display:flex; justify-content:space-between;";
+            const readyIcon = p.ready ? "✅" : "⏳";
+            li.innerHTML = `<span>${p.nickname} ${readyIcon}</span> <span style="color:#888;font-size:12px;">Score: ${p.score}</span>`;
+            els.lobbyPlayersList.appendChild(li);
+        });
+        
+        if (isHost && data.status === "waiting") {
+            els.btnHostStart.style.display = 'block';
+            els.lobbyStatusText.textContent = "Вы Хост. Нажмите НАЧАТЬ ИГРУ, когда будете готовы.";
+        } else {
+            els.btnHostStart.style.display = 'none';
+            if(data.status === "starting") els.lobbyStatusText.textContent = "Игра готовится к запуску...";
+        }
+
+        if (data.status === "starting" && state.phase === 'ONLINE_LOBBY') showReadyPhase();
+        if (data.status === "playing" && state.phase === 'ONLINE_READY') startOnlineGame(data);
+        else if (data.status === "finished") showOnlineResults(data);
+    }, (err) => console.error(err));
+}
+
+els.btnHostStart.onclick = async () => {
+    if (!window.fbDb || !isHost) return;
+    const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
+    await window.fbFunctions.updateDoc(ref, { status: "starting" });
+};
+
+els.btnLeaveLobby.onclick = leaveLobby;
+function leaveLobby() {
+    if (currentRoomListener) currentRoomListener();
+    state.roomId = null;
+    state.phase = 'MENU';
+    els.lobbyModal.style.display = 'none';
+    els.readyOverlay.style.display = 'none';
+    els.onlineServerModal.style.display = 'block'; // Go back to list or action? Let's go to list
+    fetchServers();
+}
+
+function showReadyPhase() {
+    state.phase = 'ONLINE_READY';
+    els.lobbyModal.style.display = 'none';
+    els.readyOverlay.style.display = 'flex';
+    els.readyText.textContent = "CLICK TO READY UP";
+    amReady = false;
+    els.readyCircle.onclick = markAsReady;
+}
+
+async function markAsReady() {
+    if(amReady) return;
+    amReady = true;
+    els.readyText.textContent = "WAITING FOR OTHERS...";
+    els.readyCircle.style.borderColor = "#0F0";
+    els.readyCircle.style.boxShadow = "0 0 20px rgba(0,255,0,0.5)";
+    
+    const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
+    await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
+        const snap = await transaction.get(ref);
+        const data = snap.data();
+        const pIdx = data.players.findIndex(p => p.id === myUserId);
+        if (pIdx !== -1) {
+            data.players[pIdx].ready = true;
+            transaction.update(ref, { players: data.players });
+        }
+    });
+    checkAllReady();
+}
+
+async function checkAllReady() {
+    const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
+    await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
+        const s = await transaction.get(ref);
+        const d = s.data();
+        const allReady = d.players.every(p => p.ready);
+        if(allReady && d.status === "starting") {
+            transaction.update(ref, { status: "playing" });
+        }
+    });
+}
+
+function startOnlineGame(roomData) {
+    state.phase = 'ONLINE_PLAYING';
+    els.readyOverlay.style.display = 'none';
+    showGameUI();
+    const cfg = getLevelConfig(roomData.level, roomData.difficulty);
+    state.config = cfg;
+    state.stats = { total: 0, fast: 0, med: 0, slow: 0 };
+    state.levelStartTime = performance.now();
+    state.nextSpawnTime = state.levelStartTime + 500;
+    state.gameEndTime = state.levelStartTime + (roomData.duration * 1000);
+    els.modeIndicator.textContent = "ONLINE";
+    els.modeIndicator.className = "mode-online";
+    loop(performance.now());
+}
+
+function updateOnlinePlaying(now) {
+    const remMs = state.gameEndTime - now;
+    if (remMs <= 0) { endOnlineGame(); return; }
+    els.timerDisplay.textContent = (remMs / 1000).toFixed(2) + "s";
+    if (now >= state.nextSpawnTime) { spawnWave(); state.nextSpawnTime = now + state.config.spawnInterval; }
+    for(let i=state.targets.length-1;i>=0;i--){
+        const t = state.targets[i];
+        if(t.dead) continue;
+        const lr = t.expireTime - now;
+        if(lr <= 0) { t.el.classList.add('grade-miss'); SFX.miss(); endOnlineGame(true); return; }
+        t.visualScale = 1 - Math.pow(1 - lr / t.totalLife, 2);
+        t.el.style.transform = `scale(${t.visualScale})`;
+    }
+}
+
+async function endOnlineGame(missed = false) {
+    stopLoop(); clearTargets(); state.phase = 'ONLINE_FINISHED';
+    const score = state.stats.fast * 10 + state.stats.med * 5 + state.stats.slow * 1;
+    const accuracy = state.stats.total > 0 ? (state.stats.fast / state.stats.total) * 100 : 0;
+    if (window.fbDb && state.roomId) {
+        const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
+        await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
+            const snap = await transaction.get(ref);
+            const data = snap.data();
+            const pIdx = data.players.findIndex(p => p.id === myUserId);
+            if (pIdx !== -1) {
+                data.players[pIdx].score = score;
+                data.players[pIdx].accuracy = accuracy;
+                data.players[pIdx].ready = false;
+                transaction.update(ref, { players: data.players, status: "finished" });
+            }
+        });
+    }
+}
+
+function showOnlineResults(roomData) {
+    els.gameArea.style.display = 'none'; els.hud.style.opacity = '0';
+    els.onlineResultsScreen.style.display = 'block';
+    const sorted = [...roomData.players].sort((a,b) => b.score - a.score);
+    els.onlineLeaderboard.innerHTML = '';
+    sorted.forEach((p, index) => {
+        const tr = document.createElement('tr');
+        let rankClass = "";
+        if(index === 0) rankClass = "rank-1"; else if(index === 1) rankClass = "rank-2"; else if(index === 2) rankClass = "rank-3";
+        tr.innerHTML = `<td class="${rankClass}">${index + 1}</td><td>${p.nickname}</td><td>${p.score}</td><td>${p.accuracy.toFixed(1)}%</td>`;
+        els.onlineLeaderboard.appendChild(tr);
+    });
+}
+
+els.btnBackToMainFromRes.onclick = () => {
+    els.onlineResultsScreen.style.display = 'none';
+    backToMainMenu();
+};
+
+// Game Loop Helpers
 function getLevelConfig(lvl, mode) {
     const f = (lvl-1)/(TOTAL_LEVELS-1);
     const spawnInterval = Math.max(300, 1500-f*1100);
@@ -765,7 +1059,7 @@ function showGameUI() { els.bottomMenu.classList.add('hidden'); els.gameArea.sty
 function hideGameUI() { els.bottomMenu.classList.remove('hidden'); els.gameArea.style.display = 'none'; els.hud.style.opacity = '0'; els.introOverlay.style.display = 'none'; els.bigCircle.style.display = 'none'; els.readyOverlay.style.display = 'none'; els.sensIndicator.style.opacity = '0'; }
 function backToMainMenu() { stopLoop(); clearTargets(); state.phase = 'MENU'; hideAllModals(); hideGameUI(); resetCursorToCenter(); }
 function hideAllModals() { 
-    els.levelModal.style.display = 'none'; els.resultsScreen.style.display = 'none'; els.settingsModal.style.display = 'none'; els.inventoryModal.style.display = 'none'; els.shopModal.style.display = 'none'; els.modeChoiceModal.style.display = 'none'; els.onlineServerModal.style.display = 'none'; els.createServerModal.style.display = 'none'; els.lobbyModal.style.display = 'none'; els.onlineResultsScreen.style.display = 'none';
+    els.levelModal.style.display = 'none'; els.resultsScreen.style.display = 'none'; els.settingsModal.style.display = 'none'; els.inventoryModal.style.display = 'none'; els.shopModal.style.display = 'none'; els.modeChoiceModal.style.display = 'none'; els.onlineServerModal.style.display = 'none'; els.createServerModal.style.display = 'none'; els.lobbyModal.style.display = 'none'; els.onlineResultsScreen.style.display = 'none'; els.onlineActionModal.style.display = 'none';
 }
 
 function startIntroSequence(lvl, mode) {
@@ -810,7 +1104,6 @@ function loop(ts) {
     if(el<fi) return;
     state.lastFrameTime = ts-(el%fi);
     state.frameCount++; if(ts-state.lastFpsUpdate>=1000){state.currentFps=state.frameCount;els.fpsCounter.textContent=`FPS: ${state.currentFps}`;state.frameCount=0;state.lastFpsUpdate=ts;}
-    
     if(state.phase==='INTRO') updateIntro(ts); 
     else if(state.phase==='PLAYING') updatePlaying(ts);
     else if(state.phase==='ONLINE_PLAYING') updateOnlinePlaying(ts);
@@ -861,7 +1154,7 @@ function createTargetAt(x, y, lt, sz, st){
     els.gameArea.appendChild(el);
 }
 
-// Inventory/Shop stubs
+// Inventory/Shop
 els.btnInventory.onclick = () => { renderInventory(); els.inventoryModal.style.display = 'block'; };
 els.btnCloseInventory.onclick = () => els.inventoryModal.style.display = 'none';
 els.btnShop.onclick = () => { renderShop(); els.shopModal.style.display = 'block'; };
@@ -869,394 +1162,122 @@ els.btnCloseShop.onclick = () => els.shopModal.style.display = 'none';
 function renderInventory() { els.inventoryGrid.innerHTML = '<div class="empty-text">Инвентарь пуст</div>'; }
 function renderShop() { els.shopGrid.innerHTML = '<div class="empty-text">Нет доступных товаров</div>'; }
 
-// --- ONLINE LOGIC ---
-
-let myUserId = sessionStorage.getItem('userId') || ('u_' + Math.random().toString(36).substr(2, 9));
-sessionStorage.setItem('userId', myUserId);
-let currentRoomListener = null;
-let serversListener = null;
-let isHost = false;
-let amReady = false;
-
-function openCreateServerModal() {
-    els.levelModal.style.display = 'none';
-    els.createServerModal.style.display = 'block';
-    els.selectedLevelInfo.textContent = `Level ${pendingOnlineLevel} (${selectedDifficulty.toUpperCase()})`;
-    els.serverDurationSlider.value = 30;
-    els.serverDurationVal.textContent = '30s';
+// Settings UI Update Fix
+function updateSettingsUI() {
+    if(userSettings.cursorSize > 12) userSettings.cursorSize = 12;
+    els.cursorSizeSlider.value = userSettings.cursorSize; els.cursorSizeVal.textContent = userSettings.cursorSize;
+    els.cursorPreview.style.width = userSettings.cursorSize+'px'; els.cursorPreview.style.height = userSettings.cursorSize+'px';
+    els.soundToggle.checked = userSettings.soundEnabled; els.volumeSlider.value = userSettings.volume; els.volumeVal.textContent = userSettings.volume+'%';
+    els.fpsLimitSelect.value = userSettings.fpsLimit;
+    if(userSettings.sensitivity < 1.0) userSettings.sensitivity = 1.0;
+    if(userSettings.sensitivity > 2.25) userSettings.sensitivity = 2.25;
+    els.sensSlider.value = userSettings.sensitivity; 
+    els.sensVal.textContent = userSettings.sensitivity.toFixed(2) + 'x';
 }
 
-els.serverDurationSlider.oninput = (e) => {
-    els.serverDurationVal.textContent = e.target.value + 's';
+els.sensSlider.oninput = e => { 
+    let val = parseFloat(e.target.value);
+    if(val < 1.0) val = 1.0;
+    if(val > 2.25) val = 2.25;
+    userSettings.sensitivity = val; 
+    els.sensVal.textContent = userSettings.sensitivity.toFixed(2) + 'x'; 
+    saveSettings(); 
 };
+els.cursorSizeSlider.oninput = e => { userSettings.cursorSize = +e.target.value; saveSettings(); };
+els.soundToggle.onchange = e => { userSettings.soundEnabled = e.target.checked; saveSettings(); if(userSettings.soundEnabled) initAudio(); };
+els.volumeSlider.oninput = e => { userSettings.volume = +e.target.value; els.volumeVal.textContent = userSettings.volume+'%'; saveSettings(); };
+els.fpsLimitSelect.onchange = e => { userSettings.fpsLimit = +e.target.value; saveSettings(); };
 
-els.btnCancelCreate.onclick = () => {
-    els.createServerModal.style.display = 'none';
-    openLevelSelect(); // Back to levels
+// Crop Logic
+let cropState = { img: null, x: 0, y: 0, scale: 1, isDragging: false, lastMouseX: 0, lastMouseY: 0, canvasCtx: null };
+els.avatarTrigger.onclick = () => els.fileInput.click();
+els.fileInput.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        const img = new Image();
+        img.onload = () => initCropEditor(img);
+        img.src = evt.target.result;
+    };
+    reader.readAsDataURL(file);
+    els.fileInput.value = ''; 
 };
-
-els.btnConfirmCreate.onclick = async () => {
-    if (!window.fbDb) return alert("Firebase не подключен");
-    const name = els.serverNameInput.value.trim() || "Unnamed Room";
-    const duration = parseInt(els.serverDurationSlider.value);
-    
-    try {
-        const roomRef = await window.fbFunctions.addDoc(window.fbFunctions.collection(window.fbDb, "servers"), {
-            name: name,
-            hostId: myUserId,
-            duration: duration,
-            difficulty: selectedDifficulty, // Save difficulty to room
-            level: pendingOnlineLevel,      // Save level to room
-            status: "waiting",              // Initial status
-            players: [{ id: myUserId, nickname: userProfile.nickname || "Host", score: 0, accuracy: 0, ready: false }],
-            createdAt: window.fbFunctions.serverTimestamp()
-        });
-        
-        enterLobby(roomRef.id);
-    } catch (err) {
-        console.error(err);
-        alert("Ошибка создания комнаты");
-    }
-};
-
-els.btnBackToLevels.onclick = () => {
-    els.onlineServerModal.style.display = 'none';
-    openLevelSelect();
-};
-
-els.btnRefreshServers.onclick = () => {
-    fetchServers();
-};
-
-function openOnlineServers() {
-    els.bottomMenu.classList.add('hidden');
-    els.onlineServerModal.style.display = 'block';
-    fetchServers();
+function initCropEditor(imageObj) {
+    cropState.img = imageObj; cropState.scale = 1; cropState.x = 0; cropState.y = 0;
+    const canvasWidth = 400; const canvasHeight = 400;
+    const imgRatio = imageObj.width / imageObj.height;
+    const canvasRatio = canvasWidth / canvasHeight;
+    let drawWidth, drawHeight;
+    if (imgRatio > canvasRatio) { drawHeight = canvasHeight; drawWidth = drawHeight * imgRatio; } else { drawWidth = canvasWidth; drawHeight = drawWidth / imgRatio; }
+    cropState.x = (canvasWidth - drawWidth) / 2; cropState.y = (canvasHeight - drawHeight) / 2;
+    els.zoomSlider.value = 1.0; els.cropModal.style.display = 'block';
+    cropState.canvasCtx = els.cropCanvas.getContext('2d'); renderCrop();
 }
-
-async function fetchServers() {
-    if (!window.fbDb) return;
-    els.serverListContainer.innerHTML = '<div class="empty-text">Загрузка...</div>';
-    
-    try {
-        const q = window.fbFunctions.query(
-            window.fbFunctions.collection(window.fbDb, "servers"),
-            window.fbFunctions.where("status", "==", "waiting"),
-            window.fbFunctions.limit(10)
-        );
-        const snapshot = await window.fbFunctions.getDocs(q);
-        
-        els.serverListContainer.innerHTML = '';
-        if (snapshot.empty) {
-            els.serverListContainer.innerHTML = '<div class="empty-text">Нет активных серверов</div>';
-            return;
-        }
-        
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            const card = document.createElement('div');
-            card.className = 'server-card';
-            card.innerHTML = `
-                <div class="server-info">
-                    <div class="server-name">${data.name}</div>
-                    <div class="server-details">Lvl ${data.level} | ${data.difficulty} | ${data.duration}s | ${data.players.length}/4</div>
-                </div>
-                <button class="join-btn">ВОЙТИ</button>
-            `;
-            card.querySelector('.join-btn').onclick = () => joinServer(doc.id);
-            els.serverListContainer.appendChild(card);
-        });
-    } catch (err) {
-        console.error(err);
-        els.serverListContainer.innerHTML = '<div class="empty-text">Ошибка загрузки</div>';
-    }
+function renderCrop() {
+    if (!cropState.canvasCtx || !cropState.img) return;
+    const ctx = cropState.canvasCtx; const w = els.cropCanvas.width; const h = els.cropCanvas.height;
+    ctx.clearRect(0, 0, w, h); ctx.save();
+    const img = cropState.img; const ratio = img.width / img.height;
+    let baseW, baseH;
+    if (ratio > 1) { baseH = h; baseW = baseH * ratio; } else { baseW = w; baseH = baseW / ratio; }
+    const scaledW = baseW * cropState.scale; const scaledH = baseH * cropState.scale;
+    const startX = (w - scaledW) / 2 + cropState.x; const startY = (h - scaledH) / 2 + cropState.y;
+    ctx.drawImage(img, startX, startY, scaledW, scaledH); ctx.restore();
 }
-
-async function joinServer(roomId) {
-    if (!window.fbDb) return;
-    try {
-        await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
-            const ref = window.fbFunctions.doc(window.fbDb, "servers", roomId);
-            const snap = await transaction.get(ref);
-            if (!snap.exists()) throw new Error("Комната удалена");
-            
-            const data = snap.data();
-            if (data.players.length >= 4) throw new Error("Комната полная");
-            if (data.status !== "waiting") throw new Error("Игра началась");
-            
-            // Check if I'm already in
-            if (data.players.some(p => p.id === myUserId)) return;
-
-            const newPlayer = { id: myUserId, nickname: userProfile.nickname || "Guest", score: 0, accuracy: 0, ready: false };
-            transaction.update(ref, {
-                players: [...data.players, newPlayer]
-            });
-        });
-        
-        enterLobby(roomId);
-    } catch (err) {
-        alert(err.message);
-        fetchServers();
-    }
+els.cropCanvas.addEventListener('mousedown', (e) => { cropState.isDragging = true; cropState.lastMouseX = e.clientX; cropState.lastMouseY = e.clientY; });
+window.addEventListener('mousemove', (e) => {
+    if (!cropState.isDragging) return;
+    const dx = e.clientX - cropState.lastMouseX; const dy = e.clientY - cropState.lastMouseY;
+    cropState.x += dx; cropState.y += dy;
+    cropState.lastMouseX = e.clientX; cropState.lastMouseY = e.clientY;
+    requestAnimationFrame(renderCrop);
+});
+window.addEventListener('mouseup', () => { cropState.isDragging = false; });
+els.zoomSlider.oninput = (e) => { cropState.scale = parseFloat(e.target.value); requestAnimationFrame(renderCrop); };
+els.cropCanvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    let newScale = cropState.scale + delta;
+    newScale = Math.max(0.5, Math.min(3.0, newScale));
+    cropState.scale = newScale; els.zoomSlider.value = newScale;
+    requestAnimationFrame(renderCrop);
+}, { passive: false });
+function confirmCrop() {
+    if (!cropState.img) return;
+    const size = 200; const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = size; tempCanvas.height = size;
+    const tCtx = tempCanvas.getContext('2d');
+    tCtx.fillStyle = '#000'; tCtx.fillRect(0, 0, size, size);
+    const w = els.cropCanvas.width; const h = els.cropCanvas.height;
+    const img = cropState.img; const ratio = img.width / img.height;
+    let baseW, baseH;
+    if (ratio > 1) { baseH = h; baseW = baseH * ratio; } else { baseW = w; baseH = baseW / ratio; }
+    const scaledW = baseW * cropState.scale; const scaledH = baseH * cropState.scale;
+    const startX = (w - scaledW) / 2 + cropState.x; const startY = (h - scaledH) / 2 + cropState.y;
+    const scaleFactor = size / w;
+    const finalStartX = startX * scaleFactor; const finalStartY = startY * scaleFactor;
+    const finalScaledW = scaledW * scaleFactor; const finalScaledH = scaledH * scaleFactor;
+    tCtx.drawImage(img, finalStartX, finalStartY, finalScaledW, finalScaledH);
+    tCtx.globalCompositeOperation = 'destination-in';
+    tCtx.beginPath(); tCtx.arc(size/2, size/2, size/2, 0, Math.PI*2); tCtx.fill();
+    tCtx.globalCompositeOperation = 'source-over';
+    const dataURL = tempCanvas.toDataURL('image/png');
+    userProfile.avatarData = dataURL; saveProfile();
+    els.cropModal.style.display = 'none'; cropState.img = null;
 }
-
-function enterLobby(roomId) {
-    state.roomId = roomId;
-    state.phase = 'ONLINE_LOBBY';
-    els.onlineServerModal.style.display = 'none';
-    els.lobbyModal.style.display = 'block';
-    amReady = false; // Reset ready state
-    
-    listenToRoom(roomId);
-}
-
-function listenToRoom(roomId) {
-    if (currentRoomListener) currentRoomListener();
-    
-    const ref = window.fbFunctions.doc(window.fbDb, "servers", roomId);
-    currentRoomListener = window.fbFunctions.onSnapshot(ref, (docSnap) => {
-        if (!docSnap.exists()) {
-            alert("Комната закрыта");
-            leaveLobby();
-            return;
-        }
-        const data = docSnap.data();
-        state.players = data.players;
-        
-        // Determine if I am host
-        isHost = (data.hostId === myUserId);
-        
-        // Update Lobby UI
-        els.lobbyRoomName.textContent = data.name;
-        els.lobbyPlayerCount.textContent = `${data.players.length}/4`;
-        els.lobbyPlayersList.innerHTML = '';
-        data.players.forEach(p => {
-            const li = document.createElement('li');
-            li.style.cssText = "padding:5px; border-bottom:1px solid #333; display:flex; justify-content:space-between;";
-            const readyIcon = p.ready ? "✅" : "⏳";
-            li.innerHTML = `<span>${p.nickname} ${readyIcon}</span> <span style="color:#888;font-size:12px;">Score: ${p.score}</span>`;
-            els.lobbyPlayersList.appendChild(li);
-        });
-        
-        // Show Start Button ONLY for Host when status is waiting
-        if (isHost && data.status === "waiting") {
-            els.btnHostStart.style.display = 'block';
-            els.lobbyStatusText.textContent = "Вы Хост. Нажмите НАЧАТЬ ИГРУ, когда будете готовы.";
-        } else {
-            els.btnHostStart.style.display = 'none';
-            if(data.status === "starting") {
-                els.lobbyStatusText.textContent = "Игра готовится к запуску...";
-            } else if (data.status === "playing") {
-                // Should not happen here, handled by startOnlineGame
-            }
-        }
-
-        // If status changed to starting (by host click), show READY overlay
-        if (data.status === "starting" && state.phase === 'ONLINE_LOBBY') {
-            showReadyPhase();
-        }
-        
-        // If status changed to playing externally (all ready)
-        if (data.status === "playing" && state.phase === 'ONLINE_READY') {
-            startOnlineGame(data);
-        } else if (data.status === "finished") {
-            showOnlineResults(data);
-        }
-    }, (err) => {
-        console.error(err);
-    });
-}
-
-els.btnHostStart.onclick = async () => {
-    if (!window.fbDb || !isHost) return;
-    const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
-    // Change status to starting. This triggers listeners on other clients.
-    await window.fbFunctions.updateDoc(ref, { status: "starting" });
-};
-
-els.btnLeaveLobby.onclick = leaveLobby;
-function leaveLobby() {
-    if (currentRoomListener) currentRoomListener();
-    state.roomId = null;
-    state.phase = 'MENU';
-    els.lobbyModal.style.display = 'none';
-    els.readyOverlay.style.display = 'none'; // Hide ready circle
-    els.onlineServerModal.style.display = 'block';
-    fetchServers();
-}
-
-// NEW PHASE: READY CHECK
-function showReadyPhase() {
-    state.phase = 'ONLINE_READY';
-    els.lobbyModal.style.display = 'none';
-    els.readyOverlay.style.display = 'flex';
-    els.readyText.textContent = "CLICK TO READY UP";
-    amReady = false;
-    
-    // Remove previous listener if any, attach click handler to circle
-    els.readyCircle.onclick = markAsReady;
-}
-
-async function markAsReady() {
-    if(amReady) return;
-    amReady = true;
-    els.readyText.textContent = "WAITING FOR OTHERS...";
-    els.readyCircle.style.borderColor = "#0F0";
-    els.readyCircle.style.boxShadow = "0 0 20px rgba(0,255,0,0.5)";
-    
-    // Update DB: Set my player's ready flag to true
-    const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
-    await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
-        const snap = await transaction.get(ref);
-        const data = snap.data();
-        const pIdx = data.players.findIndex(p => p.id === myUserId);
-        if (pIdx !== -1) {
-            data.players[pIdx].ready = true;
-            transaction.update(ref, { players: data.players });
-        }
-    });
-    
-    // Check if ALL are ready
-    checkAllReady();
-}
-
-async function checkAllReady() {
-    const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
-    const snap = await window.fbFunctions.getDocs(window.fbFunctions.query(ref)); // Note: getDocs returns QuerySnapshot, need getDoc for single doc usually, but here we just read once. Better use getDoc if imported, or just rely on listener.
-    // Actually, simpler: The listener updates state.players. Let's just check local state after a short delay or rely on the listener triggering start.
-    // But to be safe and instant:
-    const latestSnap = await window.fbFunctions.getDoc(ref); // Assuming getDoc is available or use query trick. 
-    // Since we didn't import getDoc explicitly in the module scope above as a separate var, let's use the listener logic primarily.
-    // However, for immediate feedback:
-    
-    // Re-read via transaction to ensure consistency
-    await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
-        const s = await transaction.get(ref);
-        const d = s.data();
-        const allReady = d.players.every(p => p.ready);
-        
-        if(allReady && d.status === "starting") {
-            transaction.update(ref, { status: "playing" });
-        }
-    });
-}
-
-function startOnlineGame(roomData) {
-    state.phase = 'ONLINE_PLAYING';
-    els.readyOverlay.style.display = 'none';
-    showGameUI();
-    
-    // Setup config based on room difficulty and level
-    const cfg = getLevelConfig(roomData.level, roomData.difficulty);
-    state.config = cfg;
-    
-    state.stats = { total: 0, fast: 0, med: 0, slow: 0 };
-    state.levelStartTime = performance.now();
-    state.nextSpawnTime = state.levelStartTime + 500;
-    state.gameEndTime = state.levelStartTime + (roomData.duration * 1000);
-    
-    els.modeIndicator.textContent = "ONLINE";
-    els.modeIndicator.className = "mode-online";
-    
-    loop(performance.now());
-}
-
-function updateOnlinePlaying(now) {
-    const remMs = state.gameEndTime - now;
-    if (remMs <= 0) {
-        endOnlineGame();
-        return;
-    }
-    
-    els.timerDisplay.textContent = (remMs / 1000).toFixed(2) + "s";
-    
-    if (now >= state.nextSpawnTime) {
-        spawnWave();
-        state.nextSpawnTime = now + state.config.spawnInterval;
-    }
-    
-    // Same target logic as offline
-    for(let i=state.targets.length-1;i>=0;i--){
-        const t = state.targets[i];
-        if(t.dead) continue;
-        const lr = t.expireTime - now;
-        if(lr <= 0) {
-            t.el.classList.add('grade-miss');
-            SFX.miss();
-            // In online, missing doesn't kill instantly, just loses points potentially? 
-            // Or strict rule: Miss = End? Let's do Miss = End for tension.
-            endOnlineGame(true); 
-            return;
-        }
-        t.visualScale = 1 - Math.pow(1 - lr / t.totalLife, 2);
-        t.el.style.transform = `scale(${t.visualScale})`;
-    }
-}
-
-async function endOnlineGame(missed = false) {
-    stopLoop();
-    clearTargets();
-    state.phase = 'ONLINE_FINISHED';
-    
-    // Calculate Score
-    // Score = Fast*10 + Med*5 + Slow*1
-    const score = state.stats.fast * 10 + state.stats.med * 5 + state.stats.slow * 1;
-    const accuracy = state.stats.total > 0 ? (state.stats.fast / state.stats.total) * 100 : 0;
-    
-    // Update DB
-    if (window.fbDb && state.roomId) {
-        const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
-        await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
-            const snap = await transaction.get(ref);
-            const data = snap.data();
-            const pIdx = data.players.findIndex(p => p.id === myUserId);
-            if (pIdx !== -1) {
-                data.players[pIdx].score = score;
-                data.players[pIdx].accuracy = accuracy;
-                data.players[pIdx].ready = false; // Reset ready for next round if needed
-                transaction.update(ref, { players: data.players, status: "finished" });
-            }
-        });
-    }
-    
-    // The listener will pick up status "finished" and call showOnlineResults
-}
-
-function showOnlineResults(roomData) {
-    els.gameArea.style.display = 'none';
-    els.hud.style.opacity = '0';
-    els.onlineResultsScreen.style.display = 'block';
-    
-    // Sort players by score
-    const sorted = [...roomData.players].sort((a,b) => b.score - a.score);
-    
-    els.onlineLeaderboard.innerHTML = '';
-    sorted.forEach((p, index) => {
-        const tr = document.createElement('tr');
-        let rankClass = "";
-        if(index === 0) rankClass = "rank-1";
-        else if(index === 1) rankClass = "rank-2";
-        else if(index === 2) rankClass = "rank-3";
-        
-        tr.innerHTML = `
-            <td class="${rankClass}">${index + 1}</td>
-            <td>${p.nickname}</td>
-            <td>${p.score}</td>
-            <td>${p.accuracy.toFixed(1)}%</td>
-        `;
-        els.onlineLeaderboard.appendChild(tr);
-    });
-}
-
-els.btnBackToMainFromRes.onclick = () => {
-    els.onlineResultsScreen.style.display = 'none';
-    backToMainMenu();
-};
+els.btnConfirmCrop.onclick = confirmCrop;
 
 // Init
 applyCursorStyle(); 
 updateProfileUI(); 
 backToMainMenu();
+
+let myUserId = sessionStorage.getItem('userId') || ('u_' + Math.random().toString(36).substr(2, 9));
+sessionStorage.setItem('userId', myUserId);
+let currentRoomListener = null;
+let isHost = false;
+let amReady = false;
 
 </script>
 </body>
