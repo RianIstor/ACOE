@@ -31,11 +31,11 @@
         .offline { color: #f00 !important; }
     </style>
     
-    <!-- Импорт Firebase SDK (ES Modules) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getDatabase, ref, set, onChildAdded, onChildChanged, onChildRemoved, update, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    <!-- Подключаем Firebase через CDN (Compatibility Mode - самый простой и надежный для одного файла) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
+    <script>
         // ТВОИ ДАННЫЕ FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyDVV5jIHsH4CS1_utz1thzgJ2c04kxV7AM",
@@ -45,19 +45,24 @@
             messagingSenderId: "141202017103",
             appId: "1:141202017103:web:3ef11cdf6b7fa057a6533a",
             measurementId: "G-9YEXXVK29W",
-            // ВАЖНО: Убедись, что эта ссылка активна в консоли Firebase!
+            // !!! УБЕДИСЬ, ЧТО ЭТА ССЫЛКА ТОЧНО ТАКАЯ ЖЕ, КАК В КОНСОЛИ FIREBASE !!!
             databaseURL: "https://sergey-game-default-rtdb.europe-west1.firebasedatabase.app" 
         };
 
         let db = null;
         try {
-            const app = initializeApp(firebaseConfig);
-            db = getDatabase(app);
-            document.getElementById('load-status').innerText = "Firebase OK";
+            // Инициализация приложения
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            // Получаем доступ к базе данных
+            db = firebase.database();
+            
+            document.getElementById('load-status').innerText = "Firebase Connected";
             document.getElementById('load-status').style.color = "#0f0";
         } catch (e) {
-            console.error(e);
-            document.getElementById('load-status').innerText = "Error Init";
+            console.error("Ошибка инициализации Firebase:", e);
+            document.getElementById('load-status').innerText = "Error: " + e.message;
             document.getElementById('load-status').style.color = "red";
         }
 
@@ -105,9 +110,9 @@
         }, {passive: false});
         window.addEventListener('touchstart', e => setTarget(e.touches[0].clientX, e.touches[0].clientY));
 
-        // ФУНКЦИЯ ВХОДА В ИГРУ (Вызывается из HTML кнопки)
+        // ФУНКЦИЯ ВХОДА В ИГРУ
         window.joinGame = async function() {
-            if (!db) return alert("Firebase не загружен!");
+            if (!db) return alert("Firebase не загружен! Проверь консоль (F12).");
             
             roomName = document.getElementById('room-input').value.trim().toUpperCase();
             if (!roomName) return alert("Введите комнату");
@@ -116,27 +121,27 @@
 
             try {
                 // Слушатели событий БД
-                const pRef = ref(db, `rooms/${roomName}/players`);
-                const oRef = ref(db, `rooms/${roomName}/orbs`);
+                const pRef = db.ref(`rooms/${roomName}/players`);
+                const oRef = db.ref(`rooms/${roomName}/orbs`);
 
-                onChildAdded(pRef, snap => {
+                pRef.on('child_added', snap => {
                     const p = snap.val();
                     if (p.id !== myId) players[p.id] = { x: p.x, y: p.y, color: p.color };
                 });
-                onChildChanged(pRef, snap => {
+                pRef.on('child_changed', snap => {
                     const p = snap.val();
                     if (p.id !== myId && players[p.id]) {
                         players[p.id].x += (p.x - players[p.id].x) * 0.2;
                         players[p.id].y += (p.y - players[p.id].y) * 0.2;
                     }
                 });
-                onChildRemoved(pRef, snap => delete players[snap.key]);
+                pRef.on('child_removed', snap => delete players[snap.key]);
 
-                onChildAdded(oRef, snap => {
+                oRef.on('child_added', snap => {
                     const o = snap.val();
                     if (!orbs.find(ex => ex.id === o.id)) orbs.push(o);
                 });
-                onChildRemoved(oRef, snap => {
+                oRef.on('child_removed', snap => {
                     const idx = orbs.findIndex(o => o.id === snap.key);
                     if (idx !== -1) {
                         orbs.splice(idx, 1);
@@ -146,7 +151,7 @@
                 });
 
                 // Регистрация себя
-                await set(ref(db, `rooms/${roomName}/players/${myId}`), {
+                await db.ref(`rooms/${roomName}/players/${myId}`).set({
                     id: myId, x: myX, y: myY, color: myColor
                 });
 
@@ -188,7 +193,7 @@
 
             // Отправка позиции (троттлинг)
             if (Date.now() % 50 < 16) {
-                update(ref(db, `rooms/${roomName}/players/${myId}`), { x: myX, y: myY });
+                db.ref(`rooms/${roomName}/players/${myId}`).update({ x: myX, y: myY });
             }
 
             // Сбор монет
@@ -197,7 +202,7 @@
                 const odx = myX - o.x;
                 const ody = myY - o.y;
                 if (Math.sqrt(odx*odx + ody*ody) < CONFIG.RADIUS + CONFIG.ORB_R) {
-                    remove(ref(db, `rooms/${roomName}/orbs/${o.id}`));
+                    db.ref(`rooms/${roomName}/orbs/${o.id}`).remove();
                     orbs.splice(i, 1);
                     totalScore++;
                     updHUD();
@@ -209,7 +214,7 @@
                 const nid = Math.random().toString(36).substr(2, 5);
                 const no = { id: nid, x: Math.random()*(W-40)+20, y: Math.random()*(H-40)+20 };
                 orbs.push(no);
-                set(ref(db, `rooms/${roomName}/orbs/${nid}`), no);
+                db.ref(`rooms/${roomName}/orbs/${nid}`).set(no);
                 lastSpawn = Date.now();
             }
         }
