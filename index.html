@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Precision Click Game: Fixed Scoring</title>
+    <title>Precision Click Game: Fair Sync</title>
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -39,6 +39,7 @@
         #cursor { position: absolute; top: 0; left: 0; background-color: #FFF; pointer-events: none; z-index: 9999; border-radius: 50%; mix-blend-mode: difference; will-change: transform; }
         #game-area { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; z-index: 10; }
         
+        /* Профиль слева */
         #profile-widget { position: absolute; top: 20px; left: 20px; display: flex; align-items: center; gap: 15px; z-index: 150; pointer-events: auto; background: rgba(20,20,20,0.8); padding: 10px 15px; border-radius: 8px; border: 1px solid #333; backdrop-filter: blur(5px); }
         .avatar-container { position: relative; width: 50px; height: 50px; border-radius: 50%; overflow: hidden; border: 2px solid #555; cursor: pointer !important; transition: border-color 0.2s; }
         .avatar-container:hover { border-color: #FFF; }
@@ -53,6 +54,7 @@
         .stats-row { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #888; margin-top: 2px; }
         #level-display-profile { color: #FFD700; font-weight: bold; }
 
+        /* HUD Игры */
         #hud { position: absolute; top: 0; left: 0; width: 1920px; z-index: 100; pointer-events: none; opacity: 0; transition: opacity 0.3s; padding-top: 30px; }
         #timer-display { position: absolute; top: 25px; left: 50%; transform: translateX(-50%); font-size: 36px; font-weight: bold; color: #FFF; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
         #status-msg { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); font-size: 20px; color: #FFD700; min-height: 24px; text-align: center; width: 600px; }
@@ -66,27 +68,59 @@
         #sens-indicator { font-size: 14px; color: #0F0; letter-spacing: 1px; opacity: 0; transition: opacity 0.3s; }
         #fps-counter { font-size: 12px; color: #444; }
 
+        /* Меню снизу */
         #bottom-menu { position: absolute; bottom: 0; left: 0; width: 1920px; height: 120px; background: linear-gradient(to top, #000, #111); border-top: 2px solid #222; display: flex; justify-content: center; align-items: center; gap: 20px; z-index: 200; transition: transform 0.3s ease, opacity 0.3s ease; }
         #bottom-menu.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
         .menu-btn { background: transparent; border: 2px solid #333; color: #888; padding: 15px 30px; font-family: inherit; font-size: 20px; transition: all 0.3s; text-transform: uppercase; letter-spacing: 2px; outline: none; border-radius: 4px; pointer-events: auto; white-space: nowrap; }
         .menu-btn:hover { border-color: #FFF; color: #FFF; box-shadow: 0 0 20px rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); }
         
+        /* Оверлеи */
         #intro-overlay { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; justify-content: center; align-items: center; z-index: 50; pointer-events: none; }
         #big-start-circle { width: 400px; height: 400px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); pointer-events: auto; position: relative; }
         #big-start-circle::after { content: "CLICK TO START"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; color: rgba(255,255,255,0.7); pointer-events: none; letter-spacing: 3px; }
 
         #ready-overlay { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; justify-content: center; align-items: center; z-index: 60; pointer-events: none; background: rgba(0,0,0,0.8); }
         #ready-circle { width: 300px; height: 300px; border-radius: 50%; border: 4px solid #DA70D6; pointer-events: auto; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; }
-        #ready-circle:hover { background: rgba(218,112,214,0.1); transform: scale(1.05); }
         #ready-text { font-size: 24px; color: #DA70D6; font-weight: bold; letter-spacing: 2px; }
 
+        /* Таблица Лидеров ПОЦЕНТР (для перерывов) */
+        #center-leaderboard {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #DA70D6;
+            border-radius: 12px;
+            padding: 20px;
+            z-index: 140;
+            display: none;
+            opacity: 1;
+            transition: opacity 0.5s ease;
+            box-shadow: 0 0 30px rgba(218, 112, 214, 0.3);
+        }
+        #center-leaderboard.fade-out { opacity: 0; }
+        .cl-title { text-align: center; color: #DA70D6; font-size: 24px; margin-bottom: 15px; letter-spacing: 3px; text-transform: uppercase; }
+        .cl-table { width: 100%; border-collapse: collapse; }
+        .cl-th { text-align: left; color: #888; border-bottom: 1px solid #444; padding: 8px; font-size: 14px; }
+        .cl-td { padding: 8px; border-bottom: 1px solid #222; font-size: 16px; }
+        .cl-rank { width: 40px; text-align: center; font-weight: bold; }
+        .cl-player { display: flex; align-items: center; gap: 10px; }
+        .cl-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid #555; background: #222; }
+        .cl-name { color: #fff; font-weight: bold; }
+        .cl-score { color: #0F0; font-weight: bold; text-align: right; }
+        .cl-stars { color: #FFD700; text-align: center; letter-spacing: 2px; }
+        .cl-break-timer { text-align: center; color: #FFF; font-size: 48px; margin-top: 10px; font-weight: bold; }
+
+        /* Круги */
         .target-circle { position: absolute; border-radius: 50%; border: 2px solid #FFF; background: transparent; pointer-events: auto; transform-origin: center center; transition: border-color 0.1s, box-shadow 0.1s; }
-        /* ЦВЕТОВАЯ ОЦЕНКА ЖИЗНИ КРУГА (СТАРЫЕ ПОРОГИ) */
         .grade-fast { border-color: #0F0 !important; box-shadow: 0 0 25px rgba(0,255,0,0.4); }
         .grade-medium { border-color: #FA0 !important; box-shadow: 0 0 25px rgba(255,170,0,0.4); }
         .grade-slow { border-color: #888 !important; box-shadow: 0 0 15px rgba(136,136,136,0.3); }
         .grade-miss { border-color: #F00 !important; box-shadow: 0 0 30px rgba(255,0,0,0.5); }
 
+        /* Модальные окна */
         .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15,15,15,0.98); backdrop-filter: blur(15px); border: 2px solid #333; padding: 50px; z-index: 500; width: 700px; max-height: 800px; overflow-y: auto; border-radius: 12px; }
         .modal h2 { text-align: center; margin-bottom: 20px; color: #FFF; letter-spacing: 5px; font-size: 32px; font-weight: normal; border-bottom: 2px solid #222; padding-bottom: 25px; }
         
@@ -148,121 +182,25 @@
         .join-btn { background: #DA70D6; color: #000; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; }
         .join-btn:hover { background: #ff99ff; }
 
-        #leaderboard-hud {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            width: 200px;
-            background: rgba(0, 0, 0, 0.75);
-            border: 1px solid #444;
-            border-radius: 6px;
-            padding: 6px;
-            z-index: 130;
-            display: none;
-            backdrop-filter: blur(6px);
-        }
-        #leaderboard-hud.active { display: block; }
-        .lb-title {
-            font-size: 10px;
-            color: #888;
-            text-align: center;
-            letter-spacing: 2px;
-            margin-bottom: 4px;
-            border-bottom: 1px solid #333;
-            padding-bottom: 4px;
-        }
-        .lb-row {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 3px 5px;
-            margin-bottom: 2px;
-            border-radius: 3px;
-            background: rgba(255,255,255,0.03);
-        }
-        .lb-row.is-local {
-            background: rgba(0,255,0,0.1);
-            border: 1px solid rgba(0,255,0,0.3);
-        }
-        .lb-row.is-finished {
-            opacity: 0.6;
-        }
-        .lb-rank {
-            font-size: 11px;
-            color: #888;
-            min-width: 16px;
-            font-weight: bold;
-        }
-        .lb-row.rank-1 .lb-rank { color: #FFD700; }
-        .lb-row.rank-2 .lb-rank { color: #C0C0C0; }
-        .lb-row.rank-3 .lb-rank { color: #CD7F32; }
-        .lb-avatar {
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            border: 1px solid #555;
-            object-fit: cover;
-            background: #222;
-            flex-shrink: 0;
-        }
-        .lb-avatar-placeholder {
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            border: 1px solid #555;
-            background: #333;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            color: #777;
-            flex-shrink: 0;
-        }
-        .lb-info {
-            flex-grow: 1;
-            overflow: hidden;
-        }
-        .lb-name-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 11px;
-        }
-        .lb-nick {
-            color: #fff;
-            font-weight: bold;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            font-size: 11px;
-        }
-        .lb-row.is-local .lb-nick { color: #0F0; }
-        .lb-level {
-            color: #FFD700;
-            font-size: 9px;
-        }
-        .lb-score-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 1px;
-        }
-        .lb-xp {
-            font-size: 9px;
-            color: #666;
-        }
-        .lb-score {
-            font-size: 12px;
-            color: #DA70D6;
-            font-weight: bold;
-        }
-        .lb-row.is-local .lb-score { color: #0F0; }
-        .lb-finished-icon {
-            color: #0F0;
-            font-size: 10px;
-            margin-left: 2px;
-        }
+        /* Финальная таблица результатов онлайн */
+        #online-results-screen { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15,15,15,0.98); backdrop-filter: blur(15px); border: 2px solid #DA70D6; padding: 40px; z-index: 500; width: 800px; max-height: 90vh; overflow-y: auto; border-radius: 12px; }
+        #online-results-screen h2 { text-align: center; margin-bottom: 20px; color: #DA70D6; letter-spacing: 5px; font-size: 32px; font-weight: normal; border-bottom: 2px solid #333; padding-bottom: 25px; }
+        .final-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 16px; }
+        .final-th { text-align: left; color: #888; border-bottom: 1px solid #444; padding: 10px; }
+        .final-td { padding: 12px 10px; border-bottom: 1px solid #222; vertical-align: middle; }
+        .final-rank { font-weight: bold; font-size: 20px; }
+        .rank-1 { color: #FFD700; }
+        .rank-2 { color: #C0C0C0; }
+        .rank-3 { color: #CD7F32; }
+        .final-player-cell { display: flex; align-items: center; gap: 10px; }
+        .final-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid #555; background: #222; }
+        .final-info { display: flex; flex-direction: column; }
+        .final-nick { font-weight: bold; color: #FFF; font-size: 18px; }
+        .final-lvl-xp { font-size: 12px; color: #888; }
+        .final-score { font-size: 20px; font-weight: bold; color: #DA70D6; text-align: right; }
+        .final-stars { text-align: center; font-size: 20px; letter-spacing: 2px; }
 
+        /* Друзья */
         .friend-input-row { display: flex; gap: 10px; margin-bottom: 20px; }
         .friend-input-row input { flex-grow: 1; background: #111; border: 1px solid #333; color: #fff; padding: 10px; font-family: inherit; font-size: 16px; border-radius: 4px; outline: none; }
         .friend-input-row input:focus { border-color: #0AF; }
@@ -292,8 +230,6 @@
         .item-icon { font-size: 32px; width: 50px; height: 50px; display: flex; justify-content: center; align-items: center; background: #111; border-radius: 50%; border: 1px solid #333; }
         .item-name { font-size: 14px; color: #DDD; word-break: break-word; }
         .empty-text { text-align: center; color: #666; font-style: italic; margin-top: 20px; grid-column: 1 / -1; }
-
-        .result-star { margin-right: 3px; }
     </style>
 </head>
 <body>
@@ -328,9 +264,21 @@
             <div id="mode-indicator" class="mode-normal">NORMAL</div>
         </div>
 
-        <div id="leaderboard-hud">
-            <div class="lb-title">ЛИДЕРЫ</div>
-            <div id="lb-rows"></div>
+        <!-- ЦЕНТРАЛЬНАЯ ТАБЛИЦА ЛИДЕРОВ (Перерывы) -->
+        <div id="center-leaderboard">
+            <div class="cl-title">РЕЗУЛЬТАТЫ РАУНДА</div>
+            <table class="cl-table">
+                <thead>
+                    <tr>
+                        <th class="cl-th cl-rank">#</th>
+                        <th class="cl-th">Игрок</th>
+                        <th class="cl-th" style="text-align:right;">Очки</th>
+                        <th class="cl-th" style="text-align:center;">Звезды</th>
+                    </tr>
+                </thead>
+                <tbody id="cl-body"></tbody>
+            </table>
+            <div class="cl-break-timer" id="cl-break-timer">5</div>
         </div>
         
         <div id="game-area"></div>
@@ -430,10 +378,24 @@
                 <input type="text" id="server-name-input" placeholder="My Room" style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white;">
             </div>
             <div class="setting-group">
+                <label class="setting-label">Количество раундов</label>
+                <select id="server-rounds-select">
+                    <option value="1">1 Раунд</option>
+                    <option value="3">3 Раунда</option>
+                </select>
+            </div>
+            <div class="setting-group">
                 <label class="setting-label">Длительность раунда (сек)</label>
                 <div class="control-row">
                     <input type="range" id="server-duration-slider" min="10" max="60" step="5" value="30">
                     <span id="server-duration-val" class="volume-val">30s</span>
+                </div>
+            </div>
+             <div class="setting-group">
+                <label class="setting-label">Пауза между раундами (сек)</label>
+                <div class="control-row">
+                    <input type="range" id="server-break-slider" min="3" max="12" step="1" value="5">
+                    <span id="server-break-val" class="volume-val">5s</span>
                 </div>
             </div>
             <button class="menu-btn close-modal-btn" id="btn-cancel-create">ОТМЕНА</button>
@@ -464,21 +426,20 @@
             <button class="menu-btn btn-danger" id="btn-leave-lobby">ВЫЙТИ</button>
         </div>
 
-        <div id="online-results-screen" class="modal" style="width:800px;">
-            <h2>РЕЗУЛЬТАТЫ РАУНДА</h2>
-            <table class="leaderboard-table" id="online-leaderboard" style="width:100%; border-collapse:collapse; margin-top:20px; font-size:18px;">
+        <div id="online-results-screen">
+            <h2>ФИНАЛЬНЫЕ РЕЗУЛЬТАТЫ</h2>
+            <table class="final-table">
                 <thead>
                     <tr>
-                        <th style="text-align:left; color:#888; border-bottom:1px solid #444; padding:10px;">#</th>
-                        <th style="text-align:left; color:#888; border-bottom:1px solid #444; padding:10px;">Игрок</th>
-                        <th style="text-align:left; color:#888; border-bottom:1px solid #444; padding:10px;">Очки</th>
-                        <th style="text-align:center; color:#888; border-bottom:1px solid #444; padding:10px;">Звёзды</th>
-                        <th style="text-align:left; color:#888; border-bottom:1px solid #444; padding:10px;">Точность</th>
+                        <th class="final-th final-rank">#</th>
+                        <th class="final-th">Игрок</th>
+                        <th class="final-th" style="text-align:right;">Общий счет</th>
+                        <th class="final-th" style="text-align:center;">Лучшие звезды</th>
                     </tr>
                 </thead>
-                <tbody></tbody>
+                <tbody id="final-table-body"></tbody>
             </table>
-            <button class="menu-btn close-modal-btn" id="btn-back-to-main-from-res">В ГЛАВНОЕ МЕНЮ</button>
+            <button class="menu-btn close-modal-btn" id="btn-back-to-main-from-res" style="margin-top:20px;">В ГЛАВНОЕ МЕНЮ</button>
         </div>
 
         <div id="results-screen">
@@ -581,8 +542,11 @@ const els = {
     btnCloseOnline: document.getElementById('btn-close-online'),
     createServerModal: document.getElementById('create-server-modal'),
     serverNameInput: document.getElementById('server-name-input'),
+    serverRoundsSelect: document.getElementById('server-rounds-select'),
     serverDurationSlider: document.getElementById('server-duration-slider'),
     serverDurationVal: document.getElementById('server-duration-val'),
+    serverBreakSlider: document.getElementById('server-break-slider'),
+    serverBreakVal: document.getElementById('server-break-val'),
     btnCancelCreate: document.getElementById('btn-cancel-create'),
     btnConfirmCreate: document.getElementById('btn-confirm-create'),
     lobbyModal: document.getElementById('lobby-modal'),
@@ -593,10 +557,11 @@ const els = {
     btnHostStart: document.getElementById('btn-host-start'),
     btnLeaveLobby: document.getElementById('btn-leave-lobby'),
     onlineResultsScreen: document.getElementById('online-results-screen'),
-    onlineLeaderboard: document.querySelector('#online-leaderboard tbody'),
+    finalTableBody: document.getElementById('final-table-body'),
     btnBackToMainFromRes: document.getElementById('btn-back-to-main-from-res'),
-    leaderboardHud: document.getElementById('leaderboard-hud'),
-    lbRows: document.getElementById('lb-rows'),
+    centerLeaderboard: document.getElementById('center-leaderboard'),
+    clBody: document.getElementById('cl-body'),
+    clBreakTimer: document.getElementById('cl-break-timer'),
     btnFriends: document.getElementById('btn-friends'),
     friendsModal: document.getElementById('friends-modal'),
     friendNickInput: document.getElementById('friend-nick-input'),
@@ -642,13 +607,13 @@ function applyCursorStyle() {
 }
 function resetCursorToCenter() { virtualMouseX = VIRTUAL_WIDTH / 2; virtualMouseY = VIRTUAL_HEIGHT / 2; syncCursorVisual(); }
 function syncCursorVisual() { els.cursor.style.transform = `translate(${virtualMouseX}px, ${virtualMouseY}px)`; }
-function updateSensIndicator() { if (['PLAYING','INTRO','ONLINE_PLAYING','ONLINE_WAITING'].includes(state.phase)) { els.sensIndicator.style.opacity = '1'; els.sensIndicator.textContent = `SENS: ${userSettings.sensitivity.toFixed(2)}x`; els.sensIndicator.style.color = '#0F0'; } else { els.sensIndicator.style.opacity = '0'; } }
+function updateSensIndicator() { if (['PLAYING','INTRO','ONLINE_PLAYING'].includes(state.phase)) { els.sensIndicator.style.opacity = '1'; els.sensIndicator.textContent = `SENS: ${userSettings.sensitivity.toFixed(2)}x`; els.sensIndicator.style.color = '#0F0'; } else { els.sensIndicator.style.opacity = '0'; } }
 
 let virtualMouseX = VIRTUAL_WIDTH / 2;
 let virtualMouseY = VIRTUAL_HEIGHT / 2;
 window.addEventListener('mousemove', e => { 
     if (els.cropModal.style.display === 'block') return;
-    const isInGame = ['PLAYING','INTRO','ONLINE_PLAYING','ONLINE_WAITING'].includes(state.phase);
+    const isInGame = ['PLAYING','INTRO','ONLINE_PLAYING'].includes(state.phase);
     const rect = els.virtualScreen.getBoundingClientRect();
     const rawX = (e.clientX - rect.left) / currentScale;
     const rawY = (e.clientY - rect.top) / currentScale;
@@ -669,7 +634,46 @@ window.addEventListener('mousedown', e => {
     if (state.phase === 'PLAYING' || state.phase === 'ONLINE_PLAYING') handleTargetClick();
 });
 
-// ЛОГИКА ОЦЕНКИ И ОЧКОВ
+// Генерация карты спавна (Fair Play)
+function generateSpawnMap(durationSec, difficulty, level) {
+    const map = [];
+    const totalMs = durationSec * 1000;
+    const cfg = getLevelConfig(level, difficulty);
+    const spawnInterval = cfg.spawnInterval;
+    const lifetime = cfg.lifetime;
+    const targetSize = cfg.targetSize;
+    
+    // Начинаем спавн с 500мс, чтобы дать игроку освоиться
+    let currentTime = 500; 
+    
+    while (currentTime < totalMs - 1000) { // Не спавним последние 1 сек
+        // Добавляем небольшой джиттер к времени, чтобы не было идеально ровной сетки, но детерминированно
+        const jitter = (Math.random() * 200) - 100; 
+        const spawnTime = currentTime + jitter;
+        
+        if (spawnTime >= totalMs - 1000) break;
+
+        // Позиция
+        const pad = 50;
+        const x = pad + Math.random() * (VIRTUAL_WIDTH - targetSize - pad * 2);
+        const y = pad + Math.random() * (VIRTUAL_HEIGHT - targetSize - pad * 2);
+        
+        map.push({
+            t: spawnTime,
+            x: x,
+            y: y,
+            size: targetSize,
+            life: lifetime
+        });
+        
+        currentTime += spawnInterval;
+    }
+    
+    // Сортируем по времени на всякий случай
+    map.sort((a, b) => a.t - b.t);
+    return map;
+}
+
 function handleTargetClick() {
     for (let i = state.targets.length - 1; i >= 0; i--) {
         const t = state.targets[i];
@@ -682,10 +686,9 @@ function handleTargetClick() {
             t.dead = true; 
             state.stats.total++;
             
-            // 1. Вычисляем долю прожитого времени (как раньше)
             const r = (performance.now() - t.spawnTime) / t.totalLife;
             
-            // 2. Определяем цвет (старые пороги: 0.67 и 0.85)
+            // Цветовая оценка (Старые пороги)
             if (r < 0.67) { 
                 t.el.classList.add('grade-fast'); 
                 state.stats.fast++; 
@@ -702,9 +705,7 @@ function handleTargetClick() {
                 SFX.slow(); 
             }
             
-            // 3. Начисляем очки (новая логика: от 1 до 10)
-            // Если кликнули быстро (r близко к 0), получаем много очков.
-            // Если медленно (r близко к 1), мало очков.
+            // Очки 1-10
             let points = Math.max(1, Math.round((1 - r) * 10));
             state.stats.points = (state.stats.points || 0) + points;
             
@@ -715,7 +716,6 @@ function handleTargetClick() {
                 if (newLevel > oldLevel) SFX.levelUp();
             } else if (state.phase === 'ONLINE_PLAYING') {
                 state.localScore += points;
-                renderLeaderboard();
                 sendScoreUpdate();
             }
             
@@ -744,7 +744,10 @@ async function sendScoreUpdate() {
     }
 }
 
-function calculateStars(accuracy) {
+function calculateStars(accuracy, survived) {
+    // Если проиграл (не выжил) -> 0 звезд
+    if (!survived) return { stars: 0, isRed: false };
+    
     if (accuracy >= 99.9) return { stars: 3, isRed: true };
     if (accuracy >= 85) return { stars: 3, isRed: false };
     if (accuracy >= 55) return { stars: 2, isRed: false };
@@ -774,7 +777,7 @@ window.addEventListener('keydown', e => {
         if(els.levelModal.style.display === 'block') { els.levelModal.style.display = 'none'; els.modeChoiceModal.style.display = 'block'; return; }
         if(els.modeChoiceModal.style.display === 'block') { els.modeChoiceModal.style.display = 'none'; els.bottomMenu.classList.remove('hidden'); return; }
         
-        if(['PLAYING','INTRO','ONLINE_PLAYING','ONLINE_WAITING'].includes(state.phase)) { backToMainMenu(); return; }
+        if(['PLAYING','INTRO','ONLINE_PLAYING'].includes(state.phase)) { backToMainMenu(); return; }
         if(state.phase === 'RESULTS' || state.phase === 'ONLINE_RESULTS') { backToMainMenu(); return; }
         if(state.phase === 'MENU') { window.close(); }
     }
@@ -874,6 +877,8 @@ els.btnGoCreate.onclick = () => {
     els.createServerModal.style.display = 'block';
     els.serverDurationSlider.value = 30;
     els.serverDurationVal.textContent = '30s';
+    els.serverBreakSlider.value = 5;
+    els.serverBreakVal.textContent = '5s';
 };
 
 els.btnGoFind.onclick = () => {
@@ -885,17 +890,23 @@ els.btnGoFind.onclick = () => {
 els.btnCancelCreate.onclick = () => { els.createServerModal.style.display = 'none'; els.onlineActionModal.style.display = 'block'; };
 
 els.serverDurationSlider.oninput = (e) => { els.serverDurationVal.textContent = e.target.value + 's'; };
+els.serverBreakSlider.oninput = (e) => { els.serverBreakVal.textContent = e.target.value + 's'; };
 
 els.btnConfirmCreate.onclick = async () => {
     if (!window.fbDb) return alert("Firebase не подключен");
     const name = els.serverNameInput.value.trim() || "Unnamed Room";
+    const rounds = parseInt(els.serverRoundsSelect.value);
     const duration = parseInt(els.serverDurationSlider.value);
+    const breakTime = parseInt(els.serverBreakSlider.value);
     
     try {
         const roomRef = await window.fbFunctions.addDoc(window.fbFunctions.collection(window.fbDb, "servers"), {
             name: name,
             hostId: myUserId,
             duration: duration,
+            breakTime: breakTime,
+            totalRounds: rounds,
+            currentRound: 1,
             difficulty: selectedDifficulty,
             level: pendingOnlineLevel,
             status: "waiting",
@@ -904,6 +915,7 @@ els.btnConfirmCreate.onclick = async () => {
             playerAccuracy: { [myUserId]: 0 },
             playerXp: { [myUserId]: userProfile.xp },
             playerFinished: {},
+            roundHistory: [], // Хранит результаты каждого раунда
             createdAt: window.fbFunctions.serverTimestamp()
         });
         enterLobby(roomRef.id);
@@ -952,7 +964,7 @@ async function fetchServers() {
             card.innerHTML = `
                 <div class="server-info">
                     <div class="server-name">${data.name}</div>
-                    <div class="server-details">Lvl ${data.level} | ${data.difficulty} | ${data.duration}s | ${(data.players||[]).length}/4</div>
+                    <div class="server-details">Lvl ${data.level} | ${data.difficulty} | ${data.duration}s | Rnds: ${data.totalRounds} | ${(data.players||[]).length}/4</div>
                 </div>
                 <button class="join-btn">ВОЙТИ</button>
             `;
@@ -1028,6 +1040,10 @@ function listenToRoom(roomId) {
         state.playerFinished = data.playerFinished || {};
         state.currentDifficulty = data.difficulty || 'normal';
         state.currentLevel = data.level || 1;
+        state.totalRounds = data.totalRounds || 1;
+        state.currentRoundNum = data.currentRound || 1;
+        state.breakTime = data.breakTime || 5;
+        state.roundHistory = data.roundHistory || [];
         isHost = (data.hostId === myUserId);
         
         if (state.phase === 'ONLINE_LOBBY' || state.phase === 'ONLINE_READY') {
@@ -1057,20 +1073,19 @@ function listenToRoom(roomId) {
         if (data.status === "playing") {
             if (state.phase === 'ONLINE_READY') {
                 startOnlineGame(data);
-            } else if (state.phase === 'ONLINE_PLAYING' || state.phase === 'ONLINE_WAITING') {
-                renderLeaderboard();
-                
-                const allFinished = data.players.every(p => state.playerFinished[p.id] === true);
-                if (allFinished) {
-                    try {
-                        await window.fbFunctions.updateDoc(ref, { status: "finished" });
-                    } catch(e) { /* ignore */ }
-                }
+            } else if (state.phase === 'ONLINE_BREAK') {
+                 // Переход из перерыва в игру handled inside startOnlineGame logic or here
+            }
+        }
+        
+        if (data.status === "break") {
+            if (state.phase === 'ONLINE_WAITING_ALL_FINISHED') {
+                showBreakScreen(data);
             }
         }
         
         if (data.status === "finished" && state.phase !== 'ONLINE_RESULTS') {
-            showOnlineResults(data);
+            showFinalResults(data);
         }
     }, (err) => console.error(err));
 }
@@ -1088,7 +1103,7 @@ function leaveLobby() {
     state.phase = 'MENU';
     els.lobbyModal.style.display = 'none';
     els.readyOverlay.style.display = 'none';
-    els.leaderboardHud.classList.remove('active');
+    els.centerLeaderboard.style.display = 'none';
     els.onlineServerModal.style.display = 'block';
     fetchServers();
 }
@@ -1128,206 +1143,305 @@ async function checkAllReady() {
         const d = s.data();
         const allReady = d.players.every(p => p.ready);
         if(allReady && d.status === "starting") {
-            transaction.update(ref, { status: "playing" });
+            // Generate Map for Round 1
+            const map = generateSpawnMap(d.duration, d.difficulty, d.level);
+            transaction.update(ref, { 
+                status: "playing",
+                spawnMap: map,
+                roundStartTime: Date.now() // Server time reference
+            });
         }
-    });
-}
-
-function renderLeaderboard() {
-    if (!state.players || state.players.length === 0) {
-        els.leaderboardHud.classList.remove('active');
-        return;
-    }
-    els.leaderboardHud.classList.add('active');
-    
-    const playersData = state.players.map(p => {
-        let score = state.playerScores[p.id] || 0;
-        let xp = state.playerXp[p.id] || 0;
-        
-        if (p.id === myUserId) {
-            if (state.phase === 'ONLINE_PLAYING') {
-                score = state.localScore;
-            }
-            xp = userProfile.xp;
-        }
-        
-        return {
-            id: p.id,
-            nickname: p.nickname || 'Anon',
-            avatar: p.avatar,
-            xp: xp,
-            score: score,
-            finished: state.playerFinished[p.id] === true
-        };
-    });
-    
-    playersData.sort((a, b) => b.score - a.score);
-    
-    els.lbRows.innerHTML = '';
-    playersData.forEach((p, index) => {
-        const isLocal = p.id === myUserId;
-        const rank = index + 1;
-        const level = calculateLevel(p.xp);
-        
-        const row = document.createElement('div');
-        row.className = `lb-row ${isLocal ? 'is-local' : ''} ${p.finished ? 'is-finished' : ''} rank-${rank}`;
-        
-        let avatarHtml;
-        if (p.avatar) {
-            avatarHtml = `<img src="${p.avatar}" class="lb-avatar">`;
-        } else {
-            avatarHtml = `<div class="lb-avatar-placeholder">👤</div>`;
-        }
-        
-        const finishedIcon = p.finished ? '<span class="lb-finished-icon">✓</span>' : '';
-        
-        row.innerHTML = `
-            <div class="lb-rank">#${rank}</div>
-            ${avatarHtml}
-            <div class="lb-info">
-                <div class="lb-name-row">
-                    <span class="lb-nick">${p.nickname}${finishedIcon}</span>
-                    <span class="lb-level">LVL ${level}</span>
-                </div>
-                <div class="lb-score-row">
-                    <span class="lb-xp">${p.xp} XP</span>
-                    <span class="lb-score">${p.score}</span>
-                </div>
-            </div>
-        `;
-        els.lbRows.appendChild(row);
     });
 }
 
 function startOnlineGame(roomData) {
     state.phase = 'ONLINE_PLAYING';
     state.localScore = 0;
+    state.stats = { total: 0, fast: 0, med: 0, slow: 0, points: 0 };
+    state.spawnIndex = 0;
+    state.currentSpawnMap = roomData.spawnMap || [];
+    
+    // Calculate local start time based on server timestamp to minimize drift issues in this simple impl
+    // In production use NTP sync, here we assume network latency is small enough or just use local perf now
+    state.gameStartTime = performance.now();
+    state.gameEndTime = state.gameStartTime + (roomData.duration * 1000);
+    
     els.readyOverlay.style.display = 'none';
+    els.centerLeaderboard.style.display = 'none';
     showGameUI();
     
-    renderLeaderboard();
-    
-    const cfg = getLevelConfig(roomData.level, roomData.difficulty);
-    state.config = cfg;
-    state.stats = { total: 0, fast: 0, med: 0, slow: 0, points: 0 };
-    state.levelStartTime = performance.now();
-    state.nextSpawnTime = state.levelStartTime + 500;
-    state.gameEndTime = state.levelStartTime + (roomData.duration * 1000);
-    els.modeIndicator.textContent = "ONLINE";
+    els.modeIndicator.textContent = `ROUND ${state.currentRoundNum}/${state.totalRounds}`;
     els.modeIndicator.className = "mode-online";
     loop(performance.now());
 }
 
 function updateOnlinePlaying(now) {
+    const elapsed = now - state.gameStartTime;
     const remMs = state.gameEndTime - now;
-    if (remMs <= 0) { endOnlineGame(false); return; }
+    
+    if (remMs <= 0) { endOnlineRound(false); return; }
+    
     els.timerDisplay.textContent = (remMs / 1000).toFixed(2) + "s";
-    if (now >= state.nextSpawnTime) { spawnWave(); state.nextSpawnTime = now + state.config.spawnInterval; }
+    
+    // Spawn Logic using Pre-generated Map
+    if (state.spawnIndex < state.currentSpawnMap.length) {
+        const nextPoint = state.currentSpawnMap[state.spawnIndex];
+        if (elapsed >= nextPoint.t) {
+            // Check if too late (less than 1 sec remaining)
+            if (remMs > 1000) {
+                createTargetAt(nextPoint.x, nextPoint.y, nextPoint.life, nextPoint.size, now);
+                state.spawnIndex++;
+            } else {
+                // Stop spawning further ahead
+                state.spawnIndex = state.currentSpawnMap.length;
+            }
+        }
+    }
+
+    // Update existing targets
     for(let i=state.targets.length-1;i>=0;i--){
         const t = state.targets[i];
         if(t.dead) continue;
         const lr = t.expireTime - now;
-        if(lr <= 0) { t.el.classList.add('grade-miss'); SFX.miss(); endOnlineGame(true); return; }
+        if(lr <= 0) { 
+            t.el.classList.add('grade-miss'); 
+            SFX.miss(); 
+            endOnlineRound(true); 
+            return; 
+        }
         t.visualScale = 1 - Math.pow(1 - lr / t.totalLife, 2);
         t.el.style.transform = `scale(${t.visualScale})`;
     }
 }
 
-async function endOnlineGame(missed = false) {
+async function endOnlineRound(missed = false) {
     stopLoop(); 
     clearTargets(); 
-    state.phase = 'ONLINE_WAITING';
+    state.phase = 'ONLINE_WAITING_ALL_FINISHED';
     
-    els.statusMsg.textContent = "Ожидание других игроков...";
-    els.statusMsg.style.color = "#DA70D6";
+    els.statusMsg.textContent = missed ? "ПРОМАХ!" : "РАУНД ОКОНЧЕН";
+    els.statusMsg.style.color = missed ? "#F44" : "#0F0";
     
     if (window.fbDb && state.roomId) {
         try {
             const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
             const accuracy = state.stats.total > 0 ? (state.stats.fast / state.stats.total) * 100 : 0;
+            const survived = !missed;
+            
+            // Save individual round result locally first? No, send to DB
             await window.fbFunctions.updateDoc(ref, {
                 [`playerScores.${myUserId}`]: state.localScore,
                 [`playerAccuracy.${myUserId}`]: accuracy,
                 [`playerXp.${myUserId}`]: userProfile.xp,
-                [`playerFinished.${myUserId}`]: true
+                [`playerFinished.${myUserId}`]: true,
+                [`playerSurvived.${myUserId}`]: survived
             });
         } catch (err) {
-            console.error("Final score send error:", err);
+            console.error("Round end send error:", err);
         }
     }
 }
 
-function saveOnlineStars(roomData) {
-    const myAccuracy = (roomData.playerAccuracy && roomData.playerAccuracy[myUserId]) || 0;
-    const starInfo = calculateStars(myAccuracy);
-    const mode = roomData.difficulty || state.currentDifficulty || 'normal';
-    const level = roomData.level || state.currentLevel || 1;
-    
-    const pr = playerProgress.ratings[mode][level];
-    const nr = { stars: starInfo.stars, isRed: starInfo.isRed };
-    
-    if (!pr || starInfo.stars > pr.stars || (starInfo.stars === pr.stars && starInfo.isRed && !pr.isRed)) {
-        playerProgress.ratings[mode][level] = nr;
-    }
-    
-    if (level === playerProgress.unlockedLevel[mode] && level < TOTAL_LEVELS) {
-        playerProgress.unlockedLevel[mode]++;
-    }
-    
-    saveProgress();
-}
-
-function showOnlineResults(roomData) {
-    state.phase = 'ONLINE_RESULTS';
-    els.gameArea.style.display = 'none'; 
+function showBreakScreen(roomData) {
+    state.phase = 'ONLINE_BREAK';
+    els.gameArea.style.display = 'none';
     els.hud.style.opacity = '0';
-    els.leaderboardHud.classList.remove('active');
-    els.onlineResultsScreen.style.display = 'block';
+    els.centerLeaderboard.style.display = 'block';
+    els.centerLeaderboard.classList.remove('fade-out');
     
-    saveOnlineStars(roomData);
-    
-    const playersData = roomData.players.map(p => {
-        const score = (roomData.playerScores && roomData.playerScores[p.id]) || 0;
-        const accuracy = (roomData.playerAccuracy && roomData.playerAccuracy[p.id]) || 0;
-        const starInfo = calculateStars(accuracy);
-        return {
-            nickname: p.nickname,
-            score: score,
-            accuracy: accuracy,
-            stars: starInfo.stars,
-            isRed: starInfo.isRed
-        };
+    // Populate Table
+    els.clBody.innerHTML = '';
+    const playersSorted = [...roomData.players].sort((a,b) => {
+        const sa = roomData.playerScores[a.id] || 0;
+        const sb = roomData.playerScores[b.id] || 0;
+        return sb - sa;
     });
     
-    const sorted = [...playersData].sort((a,b) => b.score - a.score);
-    els.onlineLeaderboard.innerHTML = '';
-    sorted.forEach((p, index) => {
+    playersSorted.forEach((p, index) => {
+        const score = roomData.playerScores[p.id] || 0;
+        const acc = roomData.playerAccuracy[p.id] || 0;
+        const survived = roomData.playerSurvived ? roomData.playerSurvived[p.id] : false;
+        const starInfo = calculateStars(acc, survived);
+        
         const tr = document.createElement('tr');
-        let rankStyle = "";
-        if(index === 0) rankStyle = "color:#FFD700; font-weight:bold;"; 
-        else if(index === 1) rankStyle = "color:#C0C0C0;"; 
-        else if(index === 2) rankStyle = "color:#CD7F32;";
+        let rankClass = "";
+        if(index === 0) rankClass = "class='cl-rank rank-1'"; 
+        else if(index === 1) rankClass = "class='cl-rank rank-2'"; 
+        else if(index === 2) rankClass = "class='cl-rank rank-3'";
+        else rankClass = "class='cl-rank'";
         
         let starsHtml = '';
-        for(let i = 1; i <= 3; i++) {
-            let c = '#333', sh = 'none';
-            if(i <= p.stars) {
-                if(p.isRed) { c = '#F00'; sh = '0 0 10px #F00'; }
-                else if(p.stars === 3) { c = '#FFD700'; sh = '0 0 10px #FFD700'; }
-                else if(p.stars === 2) { c = '#C0C0C0'; sh = '0 0 10px #C0C0C0'; }
-                else if(p.stars === 1) { c = '#CD7F32'; sh = '0 0 10px #CD7F32'; }
+        for(let i=1; i<=3; i++) {
+            let c = '#333';
+            if(i <= starInfo.stars) {
+                if(starInfo.isRed) c = '#F00';
+                else if(starInfo.stars === 3) c = '#FFD700';
+                else if(starInfo.stars === 2) c = '#C0C0C0';
+                else if(starInfo.stars === 1) c = '#CD7F32';
             }
-            starsHtml += `<span class="result-star" style="color:${c};text-shadow:${sh};">★</span>`;
+            starsHtml += `<span style="color:${c}">★</span>`;
         }
         
         tr.innerHTML = `
-            <td style="padding:10px; border-bottom:1px solid #222; ${rankStyle}">${index + 1}</td>
-            <td style="padding:10px; border-bottom:1px solid #222;">${p.nickname}</td>
-            <td style="padding:10px; border-bottom:1px solid #222;">${p.score}</td>
-            <td style="padding:10px; border-bottom:1px solid #222; text-align:center;">${starsHtml}</td>
-            <td style="padding:10px; border-bottom:1px solid #222;">${p.accuracy.toFixed(1)}%</td>
+            <td ${rankClass}>${index + 1}</td>
+            <td>
+                <div class="cl-player">
+                    ${p.avatar ? `<img src="${p.avatar}" class="cl-avatar">` : `<div class="cl-avatar" style="display:flex;align-items:center;justify-content:center;">👤</div>`}
+                    <span class="cl-name">${p.nickname}</span>
+                </div>
+            </td>
+            <td class="cl-score">${score}</td>
+            <td class="cl-stars">${starsHtml}</td>
         `;
-        els.onlineLeaderboard.appendChild(tr);
+        els.clBody.appendChild(tr);
+    });
+    
+    // Start Break Timer Countdown
+    let breakSeconds = roomData.breakTime || 5;
+    els.clBreakTimer.textContent = breakSeconds;
+    
+    const interval = setInterval(() => {
+        breakSeconds--;
+        els.clBreakTimer.textContent = breakSeconds;
+        
+        if (breakSeconds <= 1.5) {
+            els.centerLeaderboard.classList.add('fade-out');
+        }
+        
+        if (breakSeconds <= 0) {
+            clearInterval(interval);
+            els.centerLeaderboard.style.display = 'none';
+            startNextRound();
+        }
+    }, 1000);
+}
+
+async function startNextRound() {
+    if (!window.fbDb || !state.roomId) return;
+    
+    // Host increments round and generates new map
+    if (isHost) {
+        const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
+        const nextRound = state.currentRoundNum + 1;
+        
+        if (nextRound > state.totalRounds) {
+            // Match Over
+            await window.fbFunctions.updateDoc(ref, { status: "finished" });
+        } else {
+            // Prepare Next Round
+            const map = generateSpawnMap(state.duration, state.currentDifficulty, state.currentLevel);
+            await window.fbFunctions.updateDoc(ref, {
+                currentRound: nextRound,
+                status: "playing",
+                spawnMap: map,
+                roundStartTime: Date.now(),
+                // Reset scores for next round? Usually cumulative in multiplayer games like this, 
+                // but let's keep them separate in history if needed. For simplicity, we accumulate total score.
+                // However, the prompt implies "Round Results". Let's store history.
+                roundHistory: [...(state.roundHistory || []), {
+                    round: state.currentRoundNum,
+                    scores: {...state.playerScores},
+                    accuracies: {...state.playerAccuracy},
+                    survivors: {...(state.playerSurvived || {})}
+                }]
+            });
+        }
+    }
+}
+
+function showFinalResults(roomData) {
+    state.phase = 'ONLINE_RESULTS';
+    els.gameArea.style.display = 'none'; 
+    els.hud.style.opacity = '0';
+    els.centerLeaderboard.style.display = 'none';
+    els.onlineResultsScreen.style.display = 'block';
+    
+    // Aggregate Total Scores
+    const totals = {};
+    roomData.players.forEach(p => {
+        totals[p.id] = {
+            nickname: p.nickname,
+            avatar: p.avatar,
+            xp: p.xp || 0,
+            totalScore: 0,
+            bestStars: 0,
+            isRedBest: false
+        };
+    });
+    
+    // Sum up history
+    if (roomData.roundHistory) {
+        roomData.roundHistory.forEach(hist => {
+            Object.keys(hist.scores).forEach(pid => {
+                if (totals[pid]) {
+                    totals[pid].totalScore += hist.scores[pid];
+                    
+                    // Determine Stars for this round
+                    const acc = hist.accuracies[pid] || 0;
+                    const surv = hist.survivors ? hist.survivors[pid] : false;
+                    const st = calculateStars(acc, surv);
+                    
+                    if (st.stars > totals[pid].bestStars) {
+                        totals[pid].bestStars = st.stars;
+                        totals[pid].isRedBest = st.isRed;
+                    } else if (st.stars === totals[pid].bestStars && st.isRed && !totals[pid].isRedBest) {
+                         totals[pid].isRedBest = true;
+                    }
+                }
+            });
+        });
+    }
+    
+    // Also include current live scores if match ended abruptly or single round
+    Object.keys(roomData.playerScores).forEach(pid => {
+         if (totals[pid]) {
+             // If it was the last round not yet pushed to history? 
+             // Assuming history push happens before finished status change in host logic above.
+             // To be safe, if history doesn't have the last round, add current scores.
+             // But our flow pushes history THEN sets finished. So history should contain everything.
+         }
+    });
+
+    const sortedTotals = Object.values(totals).sort((a, b) => b.totalScore - a.totalScore);
+    
+    els.finalTableBody.innerHTML = '';
+    sortedTotals.forEach((p, index) => {
+        const tr = document.createElement('tr');
+        let rankClass = "";
+        if(index === 0) rankClass = "class='final-rank rank-1'"; 
+        else if(index === 1) rankClass = "class='final-rank rank-2'"; 
+        else if(index === 2) rankClass = "class='final-rank rank-3'";
+        else rankClass = "class='final-rank'";
+        
+        let starsHtml = '';
+        for(let i=1; i<=3; i++) {
+            let c = '#333';
+            if(i <= p.bestStars) {
+                if(p.isRedBest) c = '#F00';
+                else if(p.bestStars === 3) c = '#FFD700';
+                else if(p.bestStars === 2) c = '#C0C0C0';
+                else if(p.bestStars === 1) c = '#CD7F32';
+            }
+            starsHtml += `<span style="color:${c}">★</span>`;
+        }
+        
+        const lvl = calculateLevel(p.xp);
+        
+        tr.innerHTML = `
+            <td ${rankClass}>${index + 1}</td>
+            <td>
+                <div class="final-player-cell">
+                    ${p.avatar ? `<img src="${p.avatar}" class="final-avatar">` : `<div class="final-avatar" style="display:flex;align-items:center;justify-content:center;background:#333;border:1px solid #555;">👤</div>`}
+                    <div class="final-info">
+                        <span class="final-nick">${p.nickname}</span>
+                        <span class="final-lvl-xp">LVL ${lvl} • ${p.xp} XP</span>
+                    </div>
+                </div>
+            </td>
+            <td class="final-score">${p.totalScore}</td>
+            <td class="final-stars">${starsHtml}</td>
+        `;
+        els.finalTableBody.appendChild(tr);
     });
 }
 
@@ -1349,8 +1463,10 @@ let state = {
     targets: [], animationId: null, config: null, stats: {}, 
     frameCount: 0, lastFpsUpdate: 0, currentFps: 0, 
     roomId: null, players: [], localScore: 0,
-    playerScores: {}, playerAccuracy: {}, playerXp: {}, playerFinished: {},
-    currentDifficulty: 'normal'
+    playerScores: {}, playerAccuracy: {}, playerXp: {}, playerFinished: {}, playerSurvived: {},
+    currentDifficulty: 'normal',
+    totalRounds: 1, currentRoundNum: 1, breakTime: 5, roundHistory: [],
+    spawnMap: [], spawnIndex: 0, gameStartTime: 0, gameEndTime: 0, duration: 30
 };
 
 function showGameUI() { 
@@ -1366,7 +1482,7 @@ function hideGameUI() {
     els.bigCircle.style.display = 'none'; 
     els.readyOverlay.style.display = 'none'; 
     els.sensIndicator.style.opacity = '0'; 
-    els.leaderboardHud.classList.remove('active');
+    els.centerLeaderboard.style.display = 'none';
     els.statusMsg.textContent = "";
 }
 function backToMainMenu() { 
@@ -1456,7 +1572,7 @@ function showResults(stars, survived, isRed) {
     els.gameArea.style.display = 'none'; 
     els.hud.style.opacity = '0'; 
     els.sensIndicator.style.opacity = '0'; 
-    els.leaderboardHud.classList.remove('active');
+    els.centerLeaderboard.style.display = 'none';
     els.resultsScreen.style.display = 'flex';
     els.resultTitle.textContent = survived?"УРОВЕНЬ ПРОЙДЕН!":"ПРОМАХ!"; 
     els.resultTitle.style.color = survived?"#0F0":"#F44";
@@ -1478,7 +1594,7 @@ function showResults(stars, survived, isRed) {
 }
 
 function loop(ts) {
-    if(!['INTRO','PLAYING','ONLINE_WAITING','ONLINE_PLAYING'].includes(state.phase)) return;
+    if(!['INTRO','PLAYING','ONLINE_PLAYING'].includes(state.phase)) return;
     state.animationId = requestAnimationFrame(loop);
     const fi = 1000/userSettings.fpsLimit, el = ts-state.lastFrameTime;
     if(el<fi) return;
