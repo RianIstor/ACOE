@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Precision Click Game: Online Edition</title>
+    <title>Precision Click Game: Fixed Online Flow</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -48,7 +48,7 @@
 
         #game-area { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; z-index: 10; }
         
-        /* Профиль */
+        /* Профиль в меню */
         #profile-widget { position: absolute; top: 20px; left: 20px; display: flex; align-items: center; gap: 15px; z-index: 150; pointer-events: auto; background: rgba(20,20,20,0.8); padding: 10px 15px; border-radius: 8px; border: 1px solid #333; backdrop-filter: blur(5px); }
         .avatar-container { position: relative; width: 50px; height: 50px; border-radius: 50%; overflow: hidden; border: 2px solid #555; cursor: pointer !important; transition: border-color 0.2s; }
         .avatar-container:hover { border-color: #FFF; }
@@ -63,8 +63,19 @@
         .stats-row { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #888; margin-top: 2px; }
         #level-display-profile { color: #FFD700; font-weight: bold; }
 
-        /* HUD */
+        /* HUD (Во время игры) */
         #hud { position: absolute; top: 0; left: 0; width: 1920px; z-index: 100; pointer-events: none; opacity: 0; transition: opacity 0.3s; padding-top: 30px; }
+        
+        /* Мини-профиль в игре */
+        #in-game-profile {
+            position: absolute; top: 20px; left: 20px;
+            display: flex; align-items: center; gap: 10px;
+            background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 20px;
+            border: 1px solid #444; pointer-events: none;
+        }
+        #ig-avatar { width: 30px; height: 30px; border-radius: 50%; border: 1px solid #fff; object-fit: cover; }
+        #ig-nick { font-size: 14px; color: #fff; font-weight: bold; }
+
         #timer-display { position: absolute; top: 25px; left: 50%; transform: translateX(-50%); font-size: 36px; font-weight: bold; color: #FFF; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
         #status-msg { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); font-size: 20px; color: #FFD700; min-height: 24px; text-align: center; width: 600px; }
         #mode-indicator { position: absolute; top: 25px; right: 40px; font-size: 20px; letter-spacing: 2px; padding: 5px 15px; border-radius: 4px; border: 2px solid #333; }
@@ -91,6 +102,24 @@
         #big-start-circle { width: 400px; height: 400px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); pointer-events: auto; position: relative; box-shadow: 0 0 50px rgba(255,255,255,0.05); }
         #big-start-circle::after { content: "CLICK TO START"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; color: rgba(255,255,255,0.7); pointer-events: none; white-space: nowrap; letter-spacing: 3px; }
 
+        /* Новый оверлей готовности */
+        #ready-overlay { 
+            position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; 
+            display: none; justify-content: center; align-items: center; 
+            z-index: 60; pointer-events: none; background: rgba(0,0,0,0.8);
+        }
+        #ready-circle { 
+            width: 300px; height: 300px; border-radius: 50%; 
+            border: 4px solid #DA70D6; 
+            pointer-events: auto; 
+            display: flex; justify-content: center; align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 0 30px rgba(218,112,214,0.3);
+        }
+        #ready-circle:hover { background: rgba(218,112,214,0.1); transform: scale(1.05); }
+        #ready-text { font-size: 24px; color: #DA70D6; font-weight: bold; letter-spacing: 2px; }
+
         .target-circle { position: absolute; border-radius: 50%; border: 2px solid #FFF; background: transparent; pointer-events: auto; transform-origin: center center; transition: border-color 0.1s, box-shadow 0.1s; }
         .grade-fast { border-color: #0F0 !important; box-shadow: 0 0 25px rgba(0,255,0,0.4); }
         .grade-medium { border-color: #FA0 !important; box-shadow: 0 0 25px rgba(255,170,0,0.4); }
@@ -114,7 +143,7 @@
         .main-tab.active-online { border-color: #DA70D6; color: #DA70D6; background: rgba(218,112,214,0.1); box-shadow: 0 0 15px rgba(218,112,214,0.2); }
         .main-tab:hover:not(.active-offline):not(.active-online) { border-color: #555; color: #AAA; }
 
-        /* Табы сложности (для офлайна) */
+        /* Табы сложности (для офлайна и онлайна) */
         .mode-selector { display: flex; justify-content: center; gap: 15px; margin-bottom: 30px; }
         .mode-tab { padding: 10px 20px; border: 2px solid #333; background: transparent; color: #666; font-family: inherit; font-size: 16px; cursor: pointer; transition: all 0.2s; border-radius: 4px; }
         .mode-tab.active-normal { border-color: #0F0; color: #0F0; background: rgba(0,255,0,0.1); box-shadow: 0 0 10px rgba(0,255,0,0.2); }
@@ -209,7 +238,7 @@
     <div id="virtual-screen">
         <div id="cursor"></div>
         
-        <!-- ВИДЖЕТ ПРОФИЛЯ -->
+        <!-- ВИДЖЕТ ПРОФИЛЯ (Меню) -->
         <div id="profile-widget">
             <div class="avatar-container" id="avatar-trigger">
                 <img id="user-avatar-img" src="" alt="" style="display:none;">
@@ -235,6 +264,11 @@
         </div>
 
         <div id="hud">
+            <!-- Мини-профиль в игре -->
+            <div id="in-game-profile">
+                <img id="ig-avatar" src="" alt="">
+                <span id="ig-nick">Player</span>
+            </div>
             <div id="timer-display">25.00s</div>
             <div id="status-msg"></div>
             <div id="mode-indicator" class="mode-normal">NORMAL</div>
@@ -242,6 +276,13 @@
         
         <div id="game-area"></div>
         <div id="intro-overlay"><div id="big-start-circle"></div></div>
+        
+        <!-- НОВЫЙ ОВЕРЛЕЙ ГОТОВНОСТИ -->
+        <div id="ready-overlay">
+            <div id="ready-circle">
+                <span id="ready-text">READY?</span>
+            </div>
+        </div>
 
         <!-- ГЛАВНОЕ МЕНЮ -->
         <div id="bottom-menu">
@@ -311,7 +352,7 @@
             <button class="menu-btn close-modal-btn" id="btn-close-settings">ЗАКРЫТЬ</button>
         </div>
 
-        <!-- МОДАЛКА УРОВНЕЙ (ОФЛАЙН) -->
+        <!-- МОДАЛКА УРОВНЕЙ (ОФЛАЙН И ОНЛАЙН) -->
         <div id="level-select-modal" class="modal">
             <h2>ВЫБОР УРОВНЯ</h2>
             <div class="mode-selector">
@@ -323,22 +364,9 @@
             <button class="menu-btn close-modal-btn" id="btn-close-levels">ОТМЕНА</button>
         </div>
 
-        <!-- МОДАЛКА СЕРВЕРОВ (ОНЛАЙН) -->
-        <div id="online-server-modal" class="modal">
-            <h2>ОНЛАЙН СЕРВЕРЫ</h2>
-            <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
-                <button class="menu-btn" style="padding:10px 20px; font-size:16px;" id="btn-create-server">СОЗДАТЬ КОМНАТУ</button>
-                <button class="menu-btn" style="padding:10px 20px; font-size:16px;" id="btn-refresh-servers">ОБНОВИТЬ</button>
-            </div>
-            <div class="server-list" id="server-list-container">
-                <div class="empty-text">Нет активных серверов...</div>
-            </div>
-            <button class="menu-btn close-modal-btn" id="btn-close-online">НАЗАД</button>
-        </div>
-
-        <!-- МОДАЛКА СОЗДАНИЯ СЕРВЕРА -->
+        <!-- МОДАЛКА СОЗДАНИЯ СЕРВЕРА (ОНЛАЙН) -->
         <div id="create-server-modal" class="modal">
-            <h2>НАСТРОЙКИ КОМНАТЫ</h2>
+            <h2>СОЗДАНИЕ КОМНАТЫ</h2>
             <div class="setting-group">
                 <label class="setting-label">Название комнаты</label>
                 <input type="text" id="server-name-input" placeholder="My Room" style="width:100%; padding:10px; background:#111; border:1px solid #333; color:white;">
@@ -350,16 +378,25 @@
                     <span id="server-duration-val" class="volume-val">30s</span>
                 </div>
             </div>
-            <div class="setting-group">
-                <label class="setting-label">Сложность целей</label>
-                <select id="server-difficulty-select">
-                    <option value="normal">Обычная (120px)</option>
-                    <option value="medium">Средняя (100px)</option>
-                    <option value="hard">Сложная (80px)</option>
-                </select>
+            <div class="setting-group" style="border:none; padding-bottom:0;">
+                <label class="setting-label">Выбранный уровень</label>
+                <div id="selected-level-info" style="color:#DA70D6; font-size:18px; text-align:center;">Level 1 (Normal)</div>
             </div>
             <button class="menu-btn close-modal-btn" id="btn-cancel-create">ОТМЕНА</button>
             <button class="menu-btn btn-primary" style="background:#DA70D6; color:black; margin-top:10px;" id="btn-confirm-create">СОЗДАТЬ</button>
+        </div>
+
+        <!-- МОДАЛКА СПИСКА СЕРВЕРОВ (ОНЛАЙН) -->
+        <div id="online-server-modal" class="modal">
+            <h2>СПИСОК КОМНАТ</h2>
+            <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+                <button class="menu-btn" style="padding:10px 20px; font-size:16px;" id="btn-back-to-levels">НАЗАД К УРОВНЯМ</button>
+                <button class="menu-btn" style="padding:10px 20px; font-size:16px;" id="btn-refresh-servers">ОБНОВИТЬ</button>
+            </div>
+            <div class="server-list" id="server-list-container">
+                <div class="empty-text">Нет активных серверов...</div>
+            </div>
+            <button class="menu-btn close-modal-btn" id="btn-close-online">ВЫЙТИ</button>
         </div>
 
         <!-- МОДАЛКА ЛОББИ (ОНЛАЙН) -->
@@ -368,9 +405,11 @@
             <div style="text-align:center; margin-bottom:20px;">
                 <p style="color:#888;">Комната: <strong id="lobby-room-name">...</strong></p>
                 <p style="color:#888;">Игроков: <strong id="lobby-player-count">1/4</strong></p>
+                <p style="color:#DA70D6; font-size:14px; margin-top:10px;" id="lobby-status-text">Ожидание игроков...</p>
             </div>
             <ul class="players-list" id="lobby-players-list" style="list-style:none; margin-bottom:20px;"></ul>
-            <div style="text-align:center; color:#DA70D6; font-size:14px; margin-bottom:20px;" id="lobby-status">Ожидание игроков...</div>
+            <!-- Кнопка старта для хоста -->
+            <button class="menu-btn btn-primary" id="btn-host-start" style="display:none; background:#DA70D6; color:black;">НАЧАТЬ ИГРУ</button>
             <button class="menu-btn btn-danger" id="btn-leave-lobby">ВЫЙТИ</button>
         </div>
 
@@ -383,7 +422,7 @@
                 </thead>
                 <tbody></tbody>
             </table>
-            <button class="menu-btn close-modal-btn" id="btn-back-to-lobby">В ЛОББИ</button>
+            <button class="menu-btn close-modal-btn" id="btn-back-to-main-from-res">В ГЛАВНОЕ МЕНЮ</button>
         </div>
 
         <div id="results-screen">
@@ -444,6 +483,7 @@ const els = {
     statusMsg: document.getElementById('status-msg'), modeIndicator: document.getElementById('mode-indicator'),
     sensIndicator: document.getElementById('sens-indicator'), fpsCounter: document.getElementById('fps-counter'),
     introOverlay: document.getElementById('intro-overlay'), bigCircle: document.getElementById('big-start-circle'),
+    readyOverlay: document.getElementById('ready-overlay'), readyCircle: document.getElementById('ready-circle'), readyText: document.getElementById('ready-text'),
     bottomMenu: document.getElementById('bottom-menu'), btnPlay: document.getElementById('btn-play'), btnSettings: document.getElementById('btn-settings'), btnExit: document.getElementById('btn-exit'),
     levelModal: document.getElementById('level-select-modal'), levelListContainer: document.getElementById('level-list-container'), btnCloseLevels: document.getElementById('btn-close-levels'),
     settingsModal: document.getElementById('settings-modal'), btnCloseSettings: document.getElementById('btn-close-settings'),
@@ -465,25 +505,28 @@ const els = {
     btnConfirmMode: document.getElementById('btn-confirm-mode'),
     onlineServerModal: document.getElementById('online-server-modal'),
     serverListContainer: document.getElementById('server-list-container'),
-    btnCreateServer: document.getElementById('btn-create-server'),
+    btnBackToLevels: document.getElementById('btn-back-to-levels'),
     btnRefreshServers: document.getElementById('btn-refresh-servers'),
     btnCloseOnline: document.getElementById('btn-close-online'),
     createServerModal: document.getElementById('create-server-modal'),
     serverNameInput: document.getElementById('server-name-input'),
     serverDurationSlider: document.getElementById('server-duration-slider'),
     serverDurationVal: document.getElementById('server-duration-val'),
-    serverDifficultySelect: document.getElementById('server-difficulty-select'),
+    selectedLevelInfo: document.getElementById('selected-level-info'),
     btnCancelCreate: document.getElementById('btn-cancel-create'),
     btnConfirmCreate: document.getElementById('btn-confirm-create'),
     lobbyModal: document.getElementById('lobby-modal'),
     lobbyRoomName: document.getElementById('lobby-room-name'),
     lobbyPlayerCount: document.getElementById('lobby-player-count'),
     lobbyPlayersList: document.getElementById('lobby-players-list'),
-    lobbyStatus: document.getElementById('lobby-status'),
+    lobbyStatusText: document.getElementById('lobby-status-text'),
+    btnHostStart: document.getElementById('btn-host-start'),
     btnLeaveLobby: document.getElementById('btn-leave-lobby'),
     onlineResultsScreen: document.getElementById('online-results-screen'),
     onlineLeaderboard: document.querySelector('#online-leaderboard tbody'),
-    btnBackToLobby: document.getElementById('btn-back-to-lobby')
+    btnBackToMainFromRes: document.getElementById('btn-back-to-main-from-res'),
+    igAvatar: document.getElementById('ig-avatar'),
+    igNick: document.getElementById('ig-nick')
 };
 
 const TOTAL_LEVELS = 7, LEVEL_DURATION_SEC = 25, INTRO_DURATION_MS = 2000;
@@ -492,7 +535,8 @@ const MIN_CIRCLE_GAP = 30;
 let userSettings = loadSettings();
 let userProfile = loadProfile();
 let selectedMainMode = 'offline'; // 'offline' or 'online'
-let selectedDifficulty = 'normal'; // For offline levels
+let selectedDifficulty = 'normal'; // For offline levels AND online room config
+let pendingOnlineLevel = 1; // Level chosen for online match
 
 // Audio & Crop logic copied from previous version...
 let audioCtx = null;
@@ -511,6 +555,11 @@ function updateProfileUI() {
     if (userProfile.avatarData) { els.avatarImg.src = userProfile.avatarData; els.avatarImg.style.display = 'block'; els.avatarPlaceholder.style.display = 'none'; } else { els.avatarImg.style.display = 'none'; els.avatarPlaceholder.style.display = 'flex'; }
     const cl = calculateLevel(userProfile.xp); const plx = getXpForLevel(cl); const nlx = getXpForLevel(cl + 1); const pip = userProfile.xp - plx; const tn = nlx - plx; const per = tn > 0 ? (pip / tn) * 100 : 100;
     els.levelText.textContent = `LVL ${cl}`; els.xpText.textContent = `${userProfile.xp} / ${nlx} XP`; els.xpFill.style.width = `${per}%`;
+    
+    // Update In-Game Profile
+    if (userProfile.avatarData) els.igAvatar.src = userProfile.avatarData;
+    else els.igAvatar.src = ''; 
+    els.igNick.textContent = userProfile.nickname || "Guest";
 }
 els.nicknameInput.oninput = (e) => { userProfile.nickname = e.target.value.trim(); clearTimeout(window.nickSaveTimeout); window.nickSaveTimeout = setTimeout(() => { saveProfile(); }, 500); };
 
@@ -595,6 +644,7 @@ window.addEventListener('keydown', e => {
         return;
     }
     if (e.key === 'Escape') { 
+        // FIX: Ensure proper cleanup when pressing ESC
         if(['PLAYING','INTRO','ONLINE_PLAYING'].includes(state.phase)) { backToMainMenu(); return; }
         if(state.phase === 'RESULTS') { backToMainMenu(); return; }
         if(state.phase === 'LEVEL_SELECT') { closeLevelSelect(); return; }
@@ -625,7 +675,7 @@ els.tabOnline.onclick = () => { selectedMainMode = 'online'; updateModeTabs(); }
 els.btnConfirmMode.onclick = () => {
     els.modeChoiceModal.style.display = 'none';
     if(selectedMainMode === 'offline') openLevelSelect();
-    else openOnlineServers();
+    else openLevelSelect(); // Both go to same level selector now!
 };
 
 function updateModeTabs() {
@@ -685,7 +735,16 @@ function renderLevelList() {
         sh+='</div>'; 
         let icon = '🟢'; if(selectedDifficulty === 'medium') icon = '🔵'; if(selectedDifficulty === 'hard') icon = '🔴';
         d.innerHTML=`<span class="level-name">${icon} УРОВЕНЬ ${i}</span>${sh}`;
-        if(u) d.onclick = () => { closeLevelSelect(); startIntroSequence(i, selectedDifficulty); };
+        if(u) d.onclick = () => { 
+            closeLevelSelect(); 
+            if(selectedMainMode === 'offline') {
+                startIntroSequence(i, selectedDifficulty);
+            } else {
+                // Online flow: Go to Create Server modal with pre-selected level/difficulty
+                pendingOnlineLevel = i;
+                openCreateServerModal();
+            }
+        };
         els.levelListContainer.appendChild(d);
     }
 }
@@ -703,7 +762,7 @@ function getLevelConfig(lvl, mode) {
 let state = { phase: 'MENU', currentLevel: 1, currentMode: 'normal', levelStartTime: 0, introStartTime: 0, lastFrameTime: 0, nextSpawnTime: 0, targets: [], animationId: null, config: null, stats: {}, frameCount: 0, lastFpsUpdate: 0, currentFps: 0, roomId: null, players: [] };
 
 function showGameUI() { els.bottomMenu.classList.add('hidden'); els.gameArea.style.display = 'block'; els.hud.style.opacity = '1'; }
-function hideGameUI() { els.bottomMenu.classList.remove('hidden'); els.gameArea.style.display = 'none'; els.hud.style.opacity = '0'; els.introOverlay.style.display = 'none'; els.bigCircle.style.display = 'none'; els.sensIndicator.style.opacity = '0'; }
+function hideGameUI() { els.bottomMenu.classList.remove('hidden'); els.gameArea.style.display = 'none'; els.hud.style.opacity = '0'; els.introOverlay.style.display = 'none'; els.bigCircle.style.display = 'none'; els.readyOverlay.style.display = 'none'; els.sensIndicator.style.opacity = '0'; }
 function backToMainMenu() { stopLoop(); clearTargets(); state.phase = 'MENU'; hideAllModals(); hideGameUI(); resetCursorToCenter(); }
 function hideAllModals() { 
     els.levelModal.style.display = 'none'; els.resultsScreen.style.display = 'none'; els.settingsModal.style.display = 'none'; els.inventoryModal.style.display = 'none'; els.shopModal.style.display = 'none'; els.modeChoiceModal.style.display = 'none'; els.onlineServerModal.style.display = 'none'; els.createServerModal.style.display = 'none'; els.lobbyModal.style.display = 'none'; els.onlineResultsScreen.style.display = 'none';
@@ -816,33 +875,40 @@ let myUserId = sessionStorage.getItem('userId') || ('u_' + Math.random().toStrin
 sessionStorage.setItem('userId', myUserId);
 let currentRoomListener = null;
 let serversListener = null;
+let isHost = false;
+let amReady = false;
 
-els.btnCreateServer.onclick = () => {
-    els.onlineServerModal.style.display = 'none';
+function openCreateServerModal() {
+    els.levelModal.style.display = 'none';
     els.createServerModal.style.display = 'block';
-};
-els.btnCancelCreate.onclick = () => {
-    els.createServerModal.style.display = 'none';
-    els.onlineServerModal.style.display = 'block';
-};
+    els.selectedLevelInfo.textContent = `Level ${pendingOnlineLevel} (${selectedDifficulty.toUpperCase()})`;
+    els.serverDurationSlider.value = 30;
+    els.serverDurationVal.textContent = '30s';
+}
+
 els.serverDurationSlider.oninput = (e) => {
     els.serverDurationVal.textContent = e.target.value + 's';
+};
+
+els.btnCancelCreate.onclick = () => {
+    els.createServerModal.style.display = 'none';
+    openLevelSelect(); // Back to levels
 };
 
 els.btnConfirmCreate.onclick = async () => {
     if (!window.fbDb) return alert("Firebase не подключен");
     const name = els.serverNameInput.value.trim() || "Unnamed Room";
     const duration = parseInt(els.serverDurationSlider.value);
-    const difficulty = els.serverDifficultySelect.value;
     
     try {
         const roomRef = await window.fbFunctions.addDoc(window.fbFunctions.collection(window.fbDb, "servers"), {
             name: name,
             hostId: myUserId,
             duration: duration,
-            difficulty: difficulty,
-            status: "waiting",
-            players: [{ id: myUserId, nickname: userProfile.nickname || "Host", score: 0, accuracy: 0 }],
+            difficulty: selectedDifficulty, // Save difficulty to room
+            level: pendingOnlineLevel,      // Save level to room
+            status: "waiting",              // Initial status
+            players: [{ id: myUserId, nickname: userProfile.nickname || "Host", score: 0, accuracy: 0, ready: false }],
             createdAt: window.fbFunctions.serverTimestamp()
         });
         
@@ -851,6 +917,11 @@ els.btnConfirmCreate.onclick = async () => {
         console.error(err);
         alert("Ошибка создания комнаты");
     }
+};
+
+els.btnBackToLevels.onclick = () => {
+    els.onlineServerModal.style.display = 'none';
+    openLevelSelect();
 };
 
 els.btnRefreshServers.onclick = () => {
@@ -888,7 +959,7 @@ async function fetchServers() {
             card.innerHTML = `
                 <div class="server-info">
                     <div class="server-name">${data.name}</div>
-                    <div class="server-details">Длит: ${data.duration}s | Слож: ${data.difficulty} | Игроков: ${data.players.length}/4</div>
+                    <div class="server-details">Lvl ${data.level} | ${data.difficulty} | ${data.duration}s | ${data.players.length}/4</div>
                 </div>
                 <button class="join-btn">ВОЙТИ</button>
             `;
@@ -916,7 +987,7 @@ async function joinServer(roomId) {
             // Check if I'm already in
             if (data.players.some(p => p.id === myUserId)) return;
 
-            const newPlayer = { id: myUserId, nickname: userProfile.nickname || "Guest", score: 0, accuracy: 0 };
+            const newPlayer = { id: myUserId, nickname: userProfile.nickname || "Guest", score: 0, accuracy: 0, ready: false };
             transaction.update(ref, {
                 players: [...data.players, newPlayer]
             });
@@ -934,6 +1005,7 @@ function enterLobby(roomId) {
     state.phase = 'ONLINE_LOBBY';
     els.onlineServerModal.style.display = 'none';
     els.lobbyModal.style.display = 'block';
+    amReady = false; // Reset ready state
     
     listenToRoom(roomId);
 }
@@ -951,6 +1023,9 @@ function listenToRoom(roomId) {
         const data = docSnap.data();
         state.players = data.players;
         
+        // Determine if I am host
+        isHost = (data.hostId === myUserId);
+        
         // Update Lobby UI
         els.lobbyRoomName.textContent = data.name;
         els.lobbyPlayerCount.textContent = `${data.players.length}/4`;
@@ -958,13 +1033,31 @@ function listenToRoom(roomId) {
         data.players.forEach(p => {
             const li = document.createElement('li');
             li.style.cssText = "padding:5px; border-bottom:1px solid #333; display:flex; justify-content:space-between;";
-            li.innerHTML = `<span>${p.nickname}</span> <span style="color:#888;font-size:12px;">Score: ${p.score}</span>`;
+            const readyIcon = p.ready ? "✅" : "⏳";
+            li.innerHTML = `<span>${p.nickname} ${readyIcon}</span> <span style="color:#888;font-size:12px;">Score: ${p.score}</span>`;
             els.lobbyPlayersList.appendChild(li);
         });
         
-        // Auto start if host triggers it or full? Let's keep manual start by host for simplicity, 
-        // but here we just wait for status change to 'playing'
-        if (data.status === "playing") {
+        // Show Start Button ONLY for Host when status is waiting
+        if (isHost && data.status === "waiting") {
+            els.btnHostStart.style.display = 'block';
+            els.lobbyStatusText.textContent = "Вы Хост. Нажмите НАЧАТЬ ИГРУ, когда будете готовы.";
+        } else {
+            els.btnHostStart.style.display = 'none';
+            if(data.status === "starting") {
+                els.lobbyStatusText.textContent = "Игра готовится к запуску...";
+            } else if (data.status === "playing") {
+                // Should not happen here, handled by startOnlineGame
+            }
+        }
+
+        // If status changed to starting (by host click), show READY overlay
+        if (data.status === "starting" && state.phase === 'ONLINE_LOBBY') {
+            showReadyPhase();
+        }
+        
+        // If status changed to playing externally (all ready)
+        if (data.status === "playing" && state.phase === 'ONLINE_READY') {
             startOnlineGame(data);
         } else if (data.status === "finished") {
             showOnlineResults(data);
@@ -974,44 +1067,88 @@ function listenToRoom(roomId) {
     });
 }
 
+els.btnHostStart.onclick = async () => {
+    if (!window.fbDb || !isHost) return;
+    const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
+    // Change status to starting. This triggers listeners on other clients.
+    await window.fbFunctions.updateDoc(ref, { status: "starting" });
+};
+
 els.btnLeaveLobby.onclick = leaveLobby;
 function leaveLobby() {
     if (currentRoomListener) currentRoomListener();
     state.roomId = null;
     state.phase = 'MENU';
     els.lobbyModal.style.display = 'none';
+    els.readyOverlay.style.display = 'none'; // Hide ready circle
     els.onlineServerModal.style.display = 'block';
     fetchServers();
 }
 
-// Host starts game (simple implementation: anyone can press start if they are host, or we add a button)
-// For this demo, let's assume the HOST sees a "START GAME" button in lobby if they are host.
-// But to keep it simple without modifying HTML heavily, let's make clicking the room name start it if you are host.
-els.lobbyRoomName.onclick = async () => {
-    if (!window.fbDb) return;
-    // Check if I am host
+// NEW PHASE: READY CHECK
+function showReadyPhase() {
+    state.phase = 'ONLINE_READY';
+    els.lobbyModal.style.display = 'none';
+    els.readyOverlay.style.display = 'flex';
+    els.readyText.textContent = "CLICK TO READY UP";
+    amReady = false;
+    
+    // Remove previous listener if any, attach click handler to circle
+    els.readyCircle.onclick = markAsReady;
+}
+
+async function markAsReady() {
+    if(amReady) return;
+    amReady = true;
+    els.readyText.textContent = "WAITING FOR OTHERS...";
+    els.readyCircle.style.borderColor = "#0F0";
+    els.readyCircle.style.boxShadow = "0 0 20px rgba(0,255,0,0.5)";
+    
+    // Update DB: Set my player's ready flag to true
     const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
-    const snap = await window.fbFunctions.getDocs(window.fbFunctions.query(ref)); // This won't work directly like this, need getDoc
-    // Actually simpler: just update status to playing. Firestore rules might restrict non-host writes, but in test mode everyone can write.
-    await window.fbFunctions.updateDoc(ref, { status: "playing", startTime: window.fbFunctions.serverTimestamp() });
-};
+    await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
+        const snap = await transaction.get(ref);
+        const data = snap.data();
+        const pIdx = data.players.findIndex(p => p.id === myUserId);
+        if (pIdx !== -1) {
+            data.players[pIdx].ready = true;
+            transaction.update(ref, { players: data.players });
+        }
+    });
+    
+    // Check if ALL are ready
+    checkAllReady();
+}
+
+async function checkAllReady() {
+    const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
+    const snap = await window.fbFunctions.getDocs(window.fbFunctions.query(ref)); // Note: getDocs returns QuerySnapshot, need getDoc for single doc usually, but here we just read once. Better use getDoc if imported, or just rely on listener.
+    // Actually, simpler: The listener updates state.players. Let's just check local state after a short delay or rely on the listener triggering start.
+    // But to be safe and instant:
+    const latestSnap = await window.fbFunctions.getDoc(ref); // Assuming getDoc is available or use query trick. 
+    // Since we didn't import getDoc explicitly in the module scope above as a separate var, let's use the listener logic primarily.
+    // However, for immediate feedback:
+    
+    // Re-read via transaction to ensure consistency
+    await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
+        const s = await transaction.get(ref);
+        const d = s.data();
+        const allReady = d.players.every(p => p.ready);
+        
+        if(allReady && d.status === "starting") {
+            transaction.update(ref, { status: "playing" });
+        }
+    });
+}
 
 function startOnlineGame(roomData) {
     state.phase = 'ONLINE_PLAYING';
-    els.lobbyModal.style.display = 'none';
+    els.readyOverlay.style.display = 'none';
     showGameUI();
     
-    // Setup config based on room difficulty
-    let targetSize = 120;
-    if (roomData.difficulty === 'medium') targetSize = 100;
-    if (roomData.difficulty === 'hard') targetSize = 80;
-    
-    state.config = {
-        spawnInterval: 800, // Fixed interval for fairness
-        lifetime: 2000,     // Fixed life
-        targetSize: targetSize,
-        maxTargets: 1
-    };
+    // Setup config based on room difficulty and level
+    const cfg = getLevelConfig(roomData.level, roomData.difficulty);
+    state.config = cfg;
     
     state.stats = { total: 0, fast: 0, med: 0, slow: 0 };
     state.levelStartTime = performance.now();
@@ -1069,9 +1206,6 @@ async function endOnlineGame(missed = false) {
     // Update DB
     if (window.fbDb && state.roomId) {
         const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
-        // Need to update specific player in array. Complex in Firestore.
-        // Simplification: Just log to console or overwrite whole array if small.
-        // Better: Read, Modify, Write Transaction.
         await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
             const snap = await transaction.get(ref);
             const data = snap.data();
@@ -1079,6 +1213,7 @@ async function endOnlineGame(missed = false) {
             if (pIdx !== -1) {
                 data.players[pIdx].score = score;
                 data.players[pIdx].accuracy = accuracy;
+                data.players[pIdx].ready = false; // Reset ready for next round if needed
                 transaction.update(ref, { players: data.players, status: "finished" });
             }
         });
@@ -1113,11 +1248,9 @@ function showOnlineResults(roomData) {
     });
 }
 
-els.btnBackToLobby.onclick = () => {
+els.btnBackToMainFromRes.onclick = () => {
     els.onlineResultsScreen.style.display = 'none';
-    // Reset room status to waiting so others can see leaderboard again? 
-    // Or just go back to main menu. Let's go to main menu for simplicity.
-    leaveLobby();
+    backToMainMenu();
 };
 
 // Init
