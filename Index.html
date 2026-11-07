@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MP Black World</title>
+    <style>
+        body { margin: 0; background: #000; color: #fff; font-family: monospace; overflow: hidden; touch-action: none; }
+        canvas { display: block; cursor: crosshair; }
+        
+        /* Меню */
+        #menu {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(20,20,20,0.95); border: 1px solid #444; padding: 20px;
+            border-radius: 8px; text-align: center; min-width: 260px; z-index: 100;
+        }
+        h2 { margin: 0 0 15px 0; color: #0f0; font-size: 18px; }
+        input { width: calc(100% - 20px); padding: 10px; margin-bottom: 10px; background: #222; border: 1px solid #555; color: #fff; text-align: center; font-family: inherit; }
+        button { width: 100%; padding: 10px; background: #0044aa; border: none; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #0066ff; }
+        .status { font-size: 11px; color: #888; margin-top: 10px; }
+
+        /* HUD */
+        #hud { position: absolute; top: 10px; left: 10px; pointer-events: none; z-index: 50; display: none; }
+        .score-box { background: rgba(0,0,0,0.6); padding: 5px 10px; border-left: 3px solid #ff0; }
+        .label { font-size: 10px; color: #aaa; }
+        .value { font-size: 24px; color: #ff0; font-weight: bold; }
+        
+        #net-status { position: absolute; bottom: 10px; right: 10px; font-size: 12px; color: #555; }
+        .online { color: #0f0 !important; }
+        .offline { color: #f00 !important; }
+    </style>
+    
+    <!-- Импорт Firebase SDK (ES Modules) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getDatabase, ref, set, onChildAdded, onChildChanged, onChildRemoved, update, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+        // ТВОИ ДАННЫЕ FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyDVV5jIHsH4CS1_utz1thzgJ2c04kxV7AM",
+            authDomain: "sergey-game.firebaseapp.com",
+            projectId: "sergey-game",
+            storageBucket: "sergey-game.firebasestorage.app",
+            messagingSenderId: "141202017103",
+            appId: "1:141202017103:web:3ef11cdf6b7fa057a6533a",
+            measurementId: "G-9YEXXVK29W",
+            // ВАЖНО: Убедись, что эта ссылка активна в консоли Firebase!
+            databaseURL: "https://sergey-game-default-rtdb.europe-west1.firebasedatabase.app" 
+        };
+
+        let db = null;
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getDatabase(app);
+            document.getElementById('load-status').innerText = "Firebase OK";
+            document.getElementById('load-status').style.color = "#0f0";
+        } catch (e) {
+            console.error(e);
+            document.getElementById('load-status').innerText = "Error Init";
+            document.getElementById('load-status').style.color = "red";
+        }
+
+        // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ИГРЫ
+        const CONFIG = {
+            RADIUS: 12,
+            SPEED: 6,
+            ORB_R: 8,
+            MAX_ORBS: 10,
+            COLORS: ['#FF0055', '#00FFCC', '#FFFF00', '#00AAFF', '#AA00FF']
+        };
+
+        let myId = 'u_' + Math.random().toString(36).substr(2, 6);
+        let myColor = CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)];
+        let roomName = "";
+        let isConnected = false;
+        
+        let players = {};
+        let orbs = [];
+        let totalScore = 0;
+        let lastSpawn = 0;
+
+        // CANVAS SETUP
+        const cvs = document.getElementById('cvs');
+        const ctx = cvs.getContext('2d');
+        let W, H;
+        let targetX = window.innerWidth / 2;
+        let targetY = window.innerHeight / 2;
+        let myX = targetX;
+        let myY = targetY;
+
+        function resize() {
+            W = cvs.width = window.innerWidth;
+            H = cvs.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // INPUT HANDLING
+        const setTarget = (x, y) => { targetX = x; targetY = y; };
+        window.addEventListener('mousemove', e => setTarget(e.clientX, e.clientY));
+        window.addEventListener('touchmove', e => { 
+            e.preventDefault(); 
+            setTarget(e.touches[0].clientX, e.touches[0].clientY); 
+        }, {passive: false});
+        window.addEventListener('touchstart', e => setTarget(e.touches[0].clientX, e.touches[0].clientY));
+
+        // ФУНКЦИЯ ВХОДА В ИГРУ (Вызывается из HTML кнопки)
+        window.joinGame = async function() {
+            if (!db) return alert("Firebase не загружен!");
+            
+            roomName = document.getElementById('room-input').value.trim().toUpperCase();
+            if (!roomName) return alert("Введите комнату");
+
+            setStatus("Connecting...", false);
+
+            try {
+                // Слушатели событий БД
+                const pRef = ref(db, `rooms/${roomName}/players`);
+                const oRef = ref(db, `rooms/${roomName}/orbs`);
+
+                onChildAdded(pRef, snap => {
+                    const p = snap.val();
+                    if (p.id !== myId) players[p.id] = { x: p.x, y: p.y, color: p.color };
+                });
+                onChildChanged(pRef, snap => {
+                    const p = snap.val();
+                    if (p.id !== myId && players[p.id]) {
+                        players[p.id].x += (p.x - players[p.id].x) * 0.2;
+                        players[p.id].y += (p.y - players[p.id].y) * 0.2;
+                    }
+                });
+                onChildRemoved(pRef, snap => delete players[snap.key]);
+
+                onChildAdded(oRef, snap => {
+                    const o = snap.val();
+                    if (!orbs.find(ex => ex.id === o.id)) orbs.push(o);
+                });
+                onChildRemoved(oRef, snap => {
+                    const idx = orbs.findIndex(o => o.id === snap.key);
+                    if (idx !== -1) {
+                        orbs.splice(idx, 1);
+                        totalScore++;
+                        updHUD();
+                    }
+                });
+
+                // Регистрация себя
+                await set(ref(db, `rooms/${roomName}/players/${myId}`), {
+                    id: myId, x: myX, y: myY, color: myColor
+                });
+
+                isConnected = true;
+                setStatus("ONLINE", true);
+                
+                document.getElementById('menu').style.display = 'none';
+                document.getElementById('hud').style.display = 'block';
+                
+                requestAnimationFrame(loop);
+
+            } catch (err) {
+                console.error(err);
+                setStatus("ERROR DB", false);
+                alert("Ошибка подключения к БД.\nПроверь, что Realtime Database создана в Test Mode.");
+            }
+        }
+
+        // ИГРОВОЙ ЦИКЛ
+        function loop() {
+            if (!isConnected) return;
+            logic();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        function logic() {
+            // Движение
+            const dx = targetX - myX;
+            const dy = targetY - myY;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist > 1) {
+                myX += (dx / dist) * CONFIG.SPEED;
+                myY += (dy / dist) * CONFIG.SPEED;
+                myX = Math.max(CONFIG.RADIUS, Math.min(W - CONFIG.RADIUS, myX));
+                myY = Math.max(CONFIG.RADIUS, Math.min(H - CONFIG.RADIUS, myY));
+            }
+
+            // Отправка позиции (троттлинг)
+            if (Date.now() % 50 < 16) {
+                update(ref(db, `rooms/${roomName}/players/${myId}`), { x: myX, y: myY });
+            }
+
+            // Сбор монет
+            for (let i = orbs.length - 1; i >= 0; i--) {
+                const o = orbs[i];
+                const odx = myX - o.x;
+                const ody = myY - o.y;
+                if (Math.sqrt(odx*odx + ody*ody) < CONFIG.RADIUS + CONFIG.ORB_R) {
+                    remove(ref(db, `rooms/${roomName}/orbs/${o.id}`));
+                    orbs.splice(i, 1);
+                    totalScore++;
+                    updHUD();
+                }
+            }
+
+            // Спавн монет
+            if (orbs.length < CONFIG.MAX_ORBS && Date.now() - lastSpawn > 1000) {
+                const nid = Math.random().toString(36).substr(2, 5);
+                const no = { id: nid, x: Math.random()*(W-40)+20, y: Math.random()*(H-40)+20 };
+                orbs.push(no);
+                set(ref(db, `rooms/${roomName}/orbs/${nid}`), no);
+                lastSpawn = Date.now();
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, W, H);
+
+            // Сетка
+            ctx.strokeStyle = '#111';
+            ctx.beginPath();
+            for(let x=0; x<W; x+=50) { ctx.moveTo(x,0); ctx.lineTo(x,H); }
+            for(let y=0; y<H; y+=50) { ctx.moveTo(0,y); ctx.lineTo(W,y); }
+            ctx.stroke();
+
+            // Монеты
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#FFFF00";
+            orbs.forEach(o => {
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(o.x, o.y, CONFIG.ORB_R, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#FFF';
+                ctx.beginPath();
+                ctx.arc(o.x - 2, o.y - 2, 2, 0, Math.PI*2);
+                ctx.fill();
+            });
+            ctx.shadowBlur = 0;
+
+            // Игроки
+            Object.values(players).forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, CONFIG.RADIUS, 0, Math.PI*2);
+                ctx.fill();
+                ctx.strokeStyle = '#FFF';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                
+                ctx.fillStyle = '#AAA';
+                ctx.font = '10px monospace';
+                ctx.fillText(p.id === myId ? "YOU" : "OTHER", p.x - 10, p.y - 20);
+            });
+        }
+
+        function updHUD() {
+            document.getElementById('score-display').innerText = totalScore;
+        }
+
+        function setStatus(txt, online) {
+            const el = document.getElementById('net-status');
+            el.innerText = txt;
+            el.className = online ? 'online' : 'offline';
+        }
+    </script>
+</head>
+<body>
+
+<canvas id="cvs"></canvas>
+
+<div id="menu">
+    <h2>BLACK WORLD MP</h2>
+    <input type="text" id="room-input" placeholder="Комната (напр. TEST)" value="ROOM_1">
+    <button onclick="joinGame()">ВОЙТИ</button>
+    <div class="status" id="load-status">Загрузка...</div>
+</div>
+
+<div id="hud">
+    <div class="score-box">
+        <div class="label">ОБЩИЕ ОЧКИ</div>
+        <div class="value" id="score-display">0</div>
+    </div>
+</div>
+<div id="net-status" class="offline">OFFLINE</div>
+
+</body>
+</html>
