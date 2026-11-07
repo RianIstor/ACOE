@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Multiplayer With Nicknames</title>
+    <title>Multiplayer Test Fixed</title>
     
     <!-- Импорт Firebase -->
     <script type="module">
@@ -25,14 +25,17 @@
         try {
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
-            console.log("Firebase Ready");
-        } catch (e) { console.error(e); }
+            console.log("✅ Firebase Initialized");
+        } catch (e) { 
+            console.error("❌ Firebase Init Error:", e); 
+        }
 
         window.FB = {
             db: db,
             funcs: { collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc, query, where, limit, getDocs }
         };
         
+        // Событие загрузки готово
         window.dispatchEvent(new Event('fb-loaded'));
     </script>
 
@@ -56,7 +59,7 @@
         .btn-danger { background: #dc3545; border-color: #dc3545; color: #fff; }
         .btn-danger:hover { background: #a71d2a; }
         
-        #status-msg { margin-top: 10px; font-size: 12px; color: #aaa; min-height: 20px; }
+        #status-msg { margin-top: 10px; font-size: 12px; color: #aaa; min-height: 20px; word-wrap: break-word; }
         #room-id-display { font-size: 24px; color: #ffcc00; margin: 10px 0; user-select: all; font-family: monospace; background: #222; padding: 5px; border-radius: 4px; display: inline-block;}
         
         .stat-line { font-size: 14px; margin-bottom: 8px; text-shadow: 1px 1px 2px black; color: #ddd; }
@@ -74,7 +77,6 @@
 <div id="menu-screen">
     <h2>MULTIPLAYER TEST</h2>
     
-    <!-- НОВОЕ ПОЛЕ ДЛЯ НИКА -->
     <div style="margin-bottom: 15px;">
         <input type="text" id="nickname-input" placeholder="Введите ваш никнейм..." maxlength="12" value="">
     </div>
@@ -102,7 +104,6 @@
     <div class="stat-line">Онлайн: <span id="ui-count" class="highlight">1</span></div>
     <div class="stat-line" style="color:#aa00ff;">XP: <span id="ui-xp">0</span></div>
     
-    <!-- Кнопка копирования ссылки -->
     <button id="btn-copy-link" class="btn-success" style="pointer-events:auto; margin-top:10px; font-size:12px; padding:8px 15px; width: 100%;">
         📋 Копировать ссылку для друга
     </button>
@@ -114,7 +115,6 @@
 
 <div id="hint">Управление: WASD / Стрелки.</div>
 
-<!-- Всплывающее уведомление об успешном копировании -->
 <div id="toast">✅ Ссылка скопирована!</div>
 
 <script>
@@ -149,7 +149,6 @@ const MAP = [
 let myId = sessionStorage.getItem('mp_player_id') || ('p_' + Math.random().toString(36).substr(2, 6));
 sessionStorage.setItem('mp_player_id', myId);
 
-// Получаем сохраненный ник или ставим дефолтный
 let myNickname = localStorage.getItem('mp_nickname') || 'Guest' + Math.floor(Math.random() * 100);
 
 let currentRoomId = null;
@@ -172,7 +171,7 @@ const els = {
     hint: document.getElementById('hint'),
     status: document.getElementById('status-msg'),
     joinInput: document.getElementById('join-input'),
-    nicknameInput: document.getElementById('nickname-input'), // Новый элемент
+    nicknameInput: document.getElementById('nickname-input'),
     btnCreate: document.getElementById('btn-create'),
     btnJoin: document.getElementById('btn-join'),
     btnLeave: document.getElementById('btn-leave'),
@@ -183,10 +182,8 @@ const els = {
     toast: document.getElementById('toast')
 };
 
-// Инициализация поля ника
 els.nicknameInput.value = myNickname;
 
-// Сохранение ника при изменении
 els.nicknameInput.addEventListener('change', (e) => {
     myNickname = e.target.value.trim() || 'Guest';
     myPlayer.name = myNickname;
@@ -195,20 +192,22 @@ els.nicknameInput.addEventListener('change', (e) => {
 
 // --- АВТОМАТИЧЕСКОЕ ПОДКЛЮЧЕНИЕ ПО ССЫЛКЕ ---
 window.addEventListener('load', () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomParam = urlParams.get('room');
-    
-    if (roomParam && window.FB.db) {
-        console.log("Auto-joining room:", roomParam);
-        setStatus(`Автоматическое подключение к ${roomParam}...`);
-        startGameSession(roomParam.toUpperCase());
-    } else if (!window.FB.db) {
-        window.addEventListener('fb-loaded', () => {
-             const params = new URLSearchParams(window.location.search);
-             const r = params.get('room');
-             if(r) startGameSession(r.toUpperCase());
-        });
-    }
+    // Ждем немного, пока модуль импорта выполнится
+    setTimeout(() => {
+        if (!window.FB || !window.FB.db) {
+            setStatus("⚠️ Ошибка: Firebase не загружен. Проверьте интернет.");
+            return;
+        }
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomParam = urlParams.get('room');
+        
+        if (roomParam) {
+            console.log("Auto-joining room:", roomParam);
+            setStatus(`Подключение к ${roomParam}...`);
+            startGameSession(roomParam.toUpperCase());
+        }
+    }, 1000);
 });
 
 // --- ВВОД ---
@@ -231,7 +230,7 @@ async function copyToClipboard(text) {
         showToast();
     } catch (err) {
         console.error('Не удалось скопировать текст:', err);
-        alert("Ошибка копирования.");
+        alert("Ошибка копирования. Скопируйте вручную из адресной строки.");
     }
 }
 
@@ -251,7 +250,6 @@ els.btnCopyLink.onclick = () => {
 async function createRoom() {
     if (!window.FB.db) return showError("Firebase не загружен");
     
-    // Обновляем имя из инпута перед созданием
     myNickname = els.nicknameInput.value.trim() || 'Guest';
     myPlayer.name = myNickname;
     localStorage.setItem('mp_nickname', myNickname);
@@ -263,6 +261,7 @@ async function createRoom() {
     for(let i=0; i<6; i++) roomId += chars.charAt(Math.floor(Math.random() * chars.length));
     
     try {
+        // Пытаемся создать документ
         await window.FB.funcs.setDoc(window.FB.funcs.doc(window.FB.db, "test_lobbies", roomId), {
             createdAt: window.FB.funcs.serverTimestamp(),
             hostId: myId,
@@ -272,7 +271,12 @@ async function createRoom() {
         startGameSession(roomId);
     } catch (e) {
         console.error(e);
-        showError("Ошибка создания: " + e.message);
+        // Детальная отладка ошибки прав доступа
+        if (e.code === 'permission-denied') {
+            showError("❌ ДОСТУП ЗАПРЕЩЕН! Измените Firestore Rules в консоли Firebase.");
+        } else {
+            showError("Ошибка: " + e.message);
+        }
     }
 }
 
@@ -281,12 +285,24 @@ async function joinRoomManual() {
     if (!val) return showError("Введите ID");
     if (!window.FB.db) return showError("Firebase не загружен");
     
-    // Обновляем имя из инпута перед входом
     myNickname = els.nicknameInput.value.trim() || 'Guest';
     myPlayer.name = myNickname;
     localStorage.setItem('mp_nickname', myNickname);
 
-    startGameSession(val);
+    setStatus("Проверка комнаты...");
+    
+    // Сначала проверяем, существует ли комната (чтобы дать понятную ошибку)
+    try {
+        const roomRef = window.FB.funcs.doc(window.FB.db, "test_lobbies", val);
+        const snap = await window.FB.funcs.getDocs(query(collection(window.FB.db, "test_lobbies"), where("__name__", "==", val)));
+        // Проще проверить через onSnapshot или getDoc, но здесь используем прямую проверку существования через попытку чтения
+        
+        // Для простоты сразу пытаемся войти. Если комнаты нет, слушатель игроков вернет пусто, но создание игрока упадет с ошибкой.
+        startGameSession(val);
+        
+    } catch (e) {
+         showError("Ошибка входа: " + e.message);
+    }
 }
 
 function startGameSession(roomId) {
@@ -315,13 +331,21 @@ function startGameSession(roomId) {
 
 async function registerSelfInRoom() {
     const ref = window.FB.funcs.doc(window.FB.db, "test_lobbies", currentRoomId, "players", myId);
-    await window.FB.funcs.setDoc(ref, {
-        x: myPlayer.x,
-        y: myPlayer.y,
-        color: myPlayer.color,
-        name: myPlayer.name, // Отправляем никнейм
-        timestamp: window.FB.funcs.serverTimestamp()
-    });
+    try {
+        await window.FB.funcs.setDoc(ref, {
+            x: myPlayer.x,
+            y: myPlayer.y,
+            color: myPlayer.color,
+            name: myPlayer.name,
+            timestamp: window.FB.funcs.serverTimestamp()
+        });
+    } catch (e) {
+        console.error("Register error:", e);
+        if (e.code === 'permission-denied') {
+            leaveRoom();
+            showError("❌ НЕЛЬЗЯ ВОЙТИ: Права доступа заблокированы. Исправьте Rules.");
+        }
+    }
 }
 
 function listenToPlayersInRoom() {
@@ -340,13 +364,11 @@ function listenToPlayersInRoom() {
                         x: data.x, y: data.y,
                         targetX: data.x, targetY: data.y,
                         color: data.color || getRandomColor(),
-                        name: data.name || "Unknown" // Используем полученный никнейм
+                        name: data.name || "Unknown"
                     };
                 } else {
                     otherPlayers[playerId].targetX = data.x;
                     otherPlayers[playerId].targetY = data.y;
-                    
-                    // Обновляем имя, если оно изменилось (на случай переименования на лету, хотя сейчас мы это делаем только при входе)
                     if(data.name) otherPlayers[playerId].name = data.name;
                     
                     const dist = Math.hypot(otherPlayers[playerId].x - data.x, otherPlayers[playerId].y - data.y);
@@ -363,7 +385,12 @@ function listenToPlayersInRoom() {
         els.countDisplay.textContent = Object.keys(otherPlayers).length + 1;
     }, (err) => {
         console.error(err);
-        leaveRoom();
+        if (err.code === 'permission-denied') {
+            leaveRoom();
+            showError("❌ ЧТЕНИЕ ЗАБЛОКИРОВАНО: Исправьте Firestore Rules.");
+        } else {
+            leaveRoom();
+        }
     });
 }
 
@@ -376,6 +403,8 @@ function listenToOrbsInRoom() {
             const d = doc.data();
             localOrbs.push({ id: doc.id, x: d.x, y: d.y });
         });
+    }, (err) => {
+        console.warn("Orbs listener error (might be empty initially):", err);
     });
 
     if(orbSpawnInterval) clearInterval(orbSpawnInterval);
@@ -391,7 +420,9 @@ function listenToOrbsInRoom() {
             if (MAP[tileY] && MAP[tileY][tileX] === 0) {
                 try {
                     await window.FB.funcs.addDoc(colRef, { x: rx, y: ry });
-                } catch(e) {}
+                } catch(e) {
+                    // Ignore individual orb creation errors to not spam console
+                }
             }
         }
     }, 2000);
@@ -407,9 +438,11 @@ async function syncPosition() {
     await window.FB.funcs.updateDoc(ref, {
         x: myPlayer.x,
         y: myPlayer.y,
-        name: myPlayer.name, // Синхронизируем имя тоже
+        name: myPlayer.name,
         timestamp: window.FB.funcs.serverTimestamp()
-    }).catch(e => console.warn("Sync fail", e));
+    }).catch(e => {
+        if(e.code !== 'not-found') console.warn("Sync fail", e);
+    });
 }
 
 async function collectOrb(id) {
@@ -525,24 +558,20 @@ function drawMap() {
 }
 
 function drawPlayer(x, y, color, label, isMe = false) {
-    // Тень
     ctx.beginPath();
     ctx.arc(x, y + 5, PLAYER_RADIUS * 0.8, 0, Math.PI*2);
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fill();
 
-    // Круг игрока
     ctx.beginPath();
     ctx.arc(x, y, PLAYER_RADIUS, 0, Math.PI*2);
     ctx.fillStyle = color;
     ctx.fill();
     
-    // Обводка
     ctx.lineWidth = 2;
     ctx.strokeStyle = isMe ? '#fff' : '#000';
     ctx.stroke();
     
-    // Glow effect for self
     if(isMe) {
         ctx.shadowColor = color;
         ctx.shadowBlur = 15;
@@ -553,18 +582,15 @@ function drawPlayer(x, y, color, label, isMe = false) {
         ctx.shadowBlur = 0;
     }
 
-    // Text Name
     ctx.font = 'bold 12px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
     const textWidth = ctx.measureText(label).width;
     
-    // Background for text readability
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(x - textWidth/2 - 4, y - 28, textWidth + 8, 16);
     
-    // Actual Text
     ctx.fillStyle = '#fff';
     ctx.fillText(label, x, y - 20);
 }
@@ -574,7 +600,6 @@ function render() {
     
     drawMap();
 
-    // Orbs
     ctx.shadowColor = '#aa00ff';
     ctx.shadowBlur = 10;
     ctx.fillStyle = '#aa00ff';
@@ -590,13 +615,11 @@ function render() {
     }
     ctx.shadowBlur = 0;
 
-    // Other Players
     for (let pid in otherPlayers) {
         const p = otherPlayers[pid];
         drawPlayer(p.x, p.y, p.color, p.name);
     }
 
-    // Me
     drawPlayer(myPlayer.x, myPlayer.y, myPlayer.color, myPlayer.name, true);
 }
 
@@ -627,12 +650,8 @@ function setStatus(msg) { els.status.textContent = msg; }
 function showError(msg) { 
     els.status.textContent = msg; 
     els.status.style.color = "#f44"; 
-    setTimeout(() => els.status.style.color = "#aaa", 2000); 
+    setTimeout(() => els.status.style.color = "#aaa", 3000); 
 }
-
-window.addEventListener('fb-loaded', () => {
-    console.log("Game Script Active");
-});
 
 window.addEventListener('beforeunload', () => {
     if (inGame && window.FB.db && currentRoomId) {
