@@ -3,296 +3,637 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MP Black World</title>
+    <title>Multiplayer Room Prototype</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: monospace; overflow: hidden; touch-action: none; }
-        canvas { display: block; cursor: crosshair; }
-        
-        /* Меню */
-        #menu {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(20,20,20,0.95); border: 1px solid #444; padding: 20px;
-            border-radius: 8px; text-align: center; min-width: 260px; z-index: 100;
+        :root {
+            --bg-color: #1a1a1a;
+            --panel-bg: #2d2d2d;
+            --accent: #00ffcc;
+            --text-main: #ffffff;
+            --text-muted: #aaaaaa;
+            --danger: #ff4444;
+            --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
-        h2 { margin: 0 0 15px 0; color: #0f0; font-size: 18px; }
-        input { width: calc(100% - 20px); padding: 10px; margin-bottom: 10px; background: #222; border: 1px solid #555; color: #fff; text-align: center; font-family: inherit; }
-        button { width: 100%; padding: 10px; background: #0044aa; border: none; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        button:hover { background: #0066ff; }
-        .status { font-size: 11px; color: #888; margin-top: 10px; }
 
-        /* HUD */
-        #hud { position: absolute; top: 10px; left: 10px; pointer-events: none; z-index: 50; display: none; }
-        .score-box { background: rgba(0,0,0,0.6); padding: 5px 10px; border-left: 3px solid #ff0; }
-        .label { font-size: 10px; color: #aaa; }
-        .value { font-size: 24px; color: #ff0; font-weight: bold; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* Контейнер приложения */
+        #app-container {
+            width: 100%;
+            max-width: 400px;
+            background: var(--panel-bg);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            padding: 20px;
+            position: relative;
+            transition: transform 0.3s ease;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .screen {
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Формы и кнопки */
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            background: #1f1f1f;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: white;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--accent);
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 10px;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background: #00ddbb;
+            transform: scale(1.02);
+        }
+
+        .btn-secondary {
+            background: #444;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #555;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        /* Игровой лобби */
+        .room-info {
+            background: #1f1f1f;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .room-code {
+            font-size: 2rem;
+            font-family: monospace;
+            color: var(--accent);
+            letter-spacing: 4px;
+            margin: 10px 0;
+            user-select: all;
+        }
+
+        .players-list {
+            list-style: none;
+            margin-top: 10px;
+        }
+
+        .player-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .player-name {
+            font-weight: bold;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: green;
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        /* Уведомления */
+        #toast {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 100;
+        }
+
+        #toast.show {
+            opacity: 1;
+        }
+
+        /* Debug Panel */
+        .debug-panel {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px dashed #444;
+        }
         
-        #net-status { position: absolute; bottom: 10px; right: 10px; font-size: 12px; color: #555; }
-        .online { color: #0f0 !important; }
-        .offline { color: #f00 !important; }
+        .debug-btn {
+            font-size: 0.8rem;
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid #444;
+            margin-top: 5px;
+        }
+        
+        .debug-btn:hover {
+            color: white;
+            border-color: white;
+        }
+
     </style>
-    
-    <!-- Подключаем Firebase через CDN (Compatibility Mode - самый простой и надежный для одного файла) -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-
-    <script>
-        // ТВОИ ДАННЫЕ FIREBASE
-        const firebaseConfig = {
-            apiKey: "AIzaSyDVV5jIHsH4CS1_utz1thzgJ2c04kxV7AM",
-            authDomain: "sergey-game.firebaseapp.com",
-            projectId: "sergey-game",
-            storageBucket: "sergey-game.firebasestorage.app",
-            messagingSenderId: "141202017103",
-            appId: "1:141202017103:web:3ef11cdf6b7fa057a6533a",
-            measurementId: "G-9YEXXVK29W",
-            // !!! УБЕДИСЬ, ЧТО ЭТА ССЫЛКА ТОЧНО ТАКАЯ ЖЕ, КАК В КОНСОЛИ FIREBASE !!!
-            databaseURL: "https://sergey-game-default-rtdb.europe-west1.firebasedatabase.app" 
-        };
-
-        let db = null;
-        try {
-            // Инициализация приложения
-            if (!firebase.apps.length) {
-                firebase.initializeApp(firebaseConfig);
-            }
-            // Получаем доступ к базе данных
-            db = firebase.database();
-            
-            document.getElementById('load-status').innerText = "Firebase Connected";
-            document.getElementById('load-status').style.color = "#0f0";
-        } catch (e) {
-            console.error("Ошибка инициализации Firebase:", e);
-            document.getElementById('load-status').innerText = "Error: " + e.message;
-            document.getElementById('load-status').style.color = "red";
-        }
-
-        // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ИГРЫ
-        const CONFIG = {
-            RADIUS: 12,
-            SPEED: 6,
-            ORB_R: 8,
-            MAX_ORBS: 10,
-            COLORS: ['#FF0055', '#00FFCC', '#FFFF00', '#00AAFF', '#AA00FF']
-        };
-
-        let myId = 'u_' + Math.random().toString(36).substr(2, 6);
-        let myColor = CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)];
-        let roomName = "";
-        let isConnected = false;
-        
-        let players = {};
-        let orbs = [];
-        let totalScore = 0;
-        let lastSpawn = 0;
-
-        // CANVAS SETUP
-        const cvs = document.getElementById('cvs');
-        const ctx = cvs.getContext('2d');
-        let W, H;
-        let targetX = window.innerWidth / 2;
-        let targetY = window.innerHeight / 2;
-        let myX = targetX;
-        let myY = targetY;
-
-        function resize() {
-            W = cvs.width = window.innerWidth;
-            H = cvs.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        // INPUT HANDLING
-        const setTarget = (x, y) => { targetX = x; targetY = y; };
-        window.addEventListener('mousemove', e => setTarget(e.clientX, e.clientY));
-        window.addEventListener('touchmove', e => { 
-            e.preventDefault(); 
-            setTarget(e.touches[0].clientX, e.touches[0].clientY); 
-        }, {passive: false});
-        window.addEventListener('touchstart', e => setTarget(e.touches[0].clientX, e.touches[0].clientY));
-
-        // ФУНКЦИЯ ВХОДА В ИГРУ
-        window.joinGame = async function() {
-            if (!db) return alert("Firebase не загружен! Проверь консоль (F12).");
-            
-            roomName = document.getElementById('room-input').value.trim().toUpperCase();
-            if (!roomName) return alert("Введите комнату");
-
-            setStatus("Connecting...", false);
-
-            try {
-                // Слушатели событий БД
-                const pRef = db.ref(`rooms/${roomName}/players`);
-                const oRef = db.ref(`rooms/${roomName}/orbs`);
-
-                pRef.on('child_added', snap => {
-                    const p = snap.val();
-                    if (p.id !== myId) players[p.id] = { x: p.x, y: p.y, color: p.color };
-                });
-                pRef.on('child_changed', snap => {
-                    const p = snap.val();
-                    if (p.id !== myId && players[p.id]) {
-                        players[p.id].x += (p.x - players[p.id].x) * 0.2;
-                        players[p.id].y += (p.y - players[p.id].y) * 0.2;
-                    }
-                });
-                pRef.on('child_removed', snap => delete players[snap.key]);
-
-                oRef.on('child_added', snap => {
-                    const o = snap.val();
-                    if (!orbs.find(ex => ex.id === o.id)) orbs.push(o);
-                });
-                oRef.on('child_removed', snap => {
-                    const idx = orbs.findIndex(o => o.id === snap.key);
-                    if (idx !== -1) {
-                        orbs.splice(idx, 1);
-                        totalScore++;
-                        updHUD();
-                    }
-                });
-
-                // Регистрация себя
-                await db.ref(`rooms/${roomName}/players/${myId}`).set({
-                    id: myId, x: myX, y: myY, color: myColor
-                });
-
-                isConnected = true;
-                setStatus("ONLINE", true);
-                
-                document.getElementById('menu').style.display = 'none';
-                document.getElementById('hud').style.display = 'block';
-                
-                requestAnimationFrame(loop);
-
-            } catch (err) {
-                console.error(err);
-                setStatus("ERROR DB", false);
-                alert("Ошибка подключения к БД.\nПроверь, что Realtime Database создана в Test Mode.");
-            }
-        }
-
-        // ИГРОВОЙ ЦИКЛ
-        function loop() {
-            if (!isConnected) return;
-            logic();
-            draw();
-            requestAnimationFrame(loop);
-        }
-
-        function logic() {
-            // Движение
-            const dx = targetX - myX;
-            const dy = targetY - myY;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            
-            if (dist > 1) {
-                myX += (dx / dist) * CONFIG.SPEED;
-                myY += (dy / dist) * CONFIG.SPEED;
-                myX = Math.max(CONFIG.RADIUS, Math.min(W - CONFIG.RADIUS, myX));
-                myY = Math.max(CONFIG.RADIUS, Math.min(H - CONFIG.RADIUS, myY));
-            }
-
-            // Отправка позиции (троттлинг)
-            if (Date.now() % 50 < 16) {
-                db.ref(`rooms/${roomName}/players/${myId}`).update({ x: myX, y: myY });
-            }
-
-            // Сбор монет
-            for (let i = orbs.length - 1; i >= 0; i--) {
-                const o = orbs[i];
-                const odx = myX - o.x;
-                const ody = myY - o.y;
-                if (Math.sqrt(odx*odx + ody*ody) < CONFIG.RADIUS + CONFIG.ORB_R) {
-                    db.ref(`rooms/${roomName}/orbs/${o.id}`).remove();
-                    orbs.splice(i, 1);
-                    totalScore++;
-                    updHUD();
-                }
-            }
-
-            // Спавн монет
-            if (orbs.length < CONFIG.MAX_ORBS && Date.now() - lastSpawn > 1000) {
-                const nid = Math.random().toString(36).substr(2, 5);
-                const no = { id: nid, x: Math.random()*(W-40)+20, y: Math.random()*(H-40)+20 };
-                orbs.push(no);
-                db.ref(`rooms/${roomName}/orbs/${nid}`).set(no);
-                lastSpawn = Date.now();
-            }
-        }
-
-        function draw() {
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, W, H);
-
-            // Сетка
-            ctx.strokeStyle = '#111';
-            ctx.beginPath();
-            for(let x=0; x<W; x+=50) { ctx.moveTo(x,0); ctx.lineTo(x,H); }
-            for(let y=0; y<H; y+=50) { ctx.moveTo(0,y); ctx.lineTo(W,y); }
-            ctx.stroke();
-
-            // Монеты
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = "#FFFF00";
-            orbs.forEach(o => {
-                ctx.fillStyle = '#FFD700';
-                ctx.beginPath();
-                ctx.arc(o.x, o.y, CONFIG.ORB_R, 0, Math.PI*2);
-                ctx.fill();
-                ctx.fillStyle = '#FFF';
-                ctx.beginPath();
-                ctx.arc(o.x - 2, o.y - 2, 2, 0, Math.PI*2);
-                ctx.fill();
-            });
-            ctx.shadowBlur = 0;
-
-            // Игроки
-            Object.values(players).forEach(p => {
-                ctx.fillStyle = p.color;
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = p.color;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, CONFIG.RADIUS, 0, Math.PI*2);
-                ctx.fill();
-                ctx.strokeStyle = '#FFF';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-                ctx.shadowBlur = 0;
-                
-                ctx.fillStyle = '#AAA';
-                ctx.font = '10px monospace';
-                ctx.fillText(p.id === myId ? "YOU" : "OTHER", p.x - 10, p.y - 20);
-            });
-        }
-
-        function updHUD() {
-            document.getElementById('score-display').innerText = totalScore;
-        }
-
-        function setStatus(txt, online) {
-            const el = document.getElementById('net-status');
-            el.innerText = txt;
-            el.className = online ? 'online' : 'offline';
-        }
-    </script>
 </head>
 <body>
 
-<canvas id="cvs"></canvas>
-
-<div id="menu">
-    <h2>BLACK WORLD MP</h2>
-    <input type="text" id="room-input" placeholder="Комната (напр. TEST)" value="ROOM_1">
-    <button onclick="joinGame()">ВОЙТИ</button>
-    <div class="status" id="load-status">Загрузка...</div>
-</div>
-
-<div id="hud">
-    <div class="score-box">
-        <div class="label">ОБЩИЕ ОЧКИ</div>
-        <div class="value" id="score-display">0</div>
+<div id="app-container">
+    
+    <!-- Экран Меню -->
+    <div id="menu-screen" class="screen active">
+        <h1>NetPlay Demo</h1>
+        <div class="input-group">
+            <label for="nickname">Ваш никнейм:</label>
+            <input type="text" id="nickname" placeholder="Игрок_1" value="Guest_<%= Math.floor(Math.random()*1000) %>">
+        </div>
+        <button class="btn-primary" onclick="gameApp.createRoom()">Создать комнату</button>
+        <div style="margin: 15px 0; text-align: center; color: var(--text-muted)">— или —</div>
+        <div class="input-group">
+            <label for="join-code">Код комнаты:</label>
+            <input type="text" id="join-code" placeholder="XXXXXX" maxlength="6">
+        </div>
+        <button class="btn-secondary" onclick="gameApp.joinRoom()">Присоединиться</button>
     </div>
-</div>
-<div id="net-status" class="offline">OFFLINE</div>
 
+    <!-- Экран Лобби (Ожидание игроков) -->
+    <div id="lobby-screen" class="screen">
+        <h1>Лобби</h1>
+        <div class="room-info">
+            <p style="color: var(--text-muted)">Код комнаты:</p>
+            <div class="room-code" id="display-room-code">------</div>
+            <p style="font-size: 0.8rem; color: var(--text-muted)">Поделитесь этим кодом с другом.<br>(Откройте эту страницу во второй вкладке для теста)</p>
+        </div>
+        
+        <ul class="players-list" id="players-list">
+            <!-- Список игроков будет здесь -->
+        </ul>
+
+        <button class="btn-primary" id="start-game-btn" onclick="gameApp.startGame()" disabled>Начать игру</button>
+        <button class="btn-danger" onclick="gameApp.leaveRoom()">Выйти из комнаты</button>
+
+        <div class="debug-panel">
+            <button class="debug-btn" onclick="gameApp.exportState()">Экспорт состояния (JSON)</button>
+        </div>
+    </div>
+
+    <!-- Экран Игры (Заглушка) -->
+    <div id="game-screen" class="screen">
+        <h1>Игра началась!</h1>
+        <canvas id="game-canvas" width="360" height="360"></canvas>
+        <button class="btn-secondary" onclick="gameApp.returnToLobby()">Вернуться в лобби</button>
+    </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+/**
+ * Модульный класс для управления состоянием сети (имитация WebSocket через BroadcastChannel)
+ * Если BroadcastChannel недоступен, используется localStorage fallback.
+ */
+class NetworkSimulator {
+    constructor() {
+        this.channel = null;
+        this.listeners = {};
+        this.init();
+    }
+
+    init() {
+        if ('BroadcastChannel' in window) {
+            // Используем BroadcastChannel для связи между вкладками
+            this.channel = new BroadcastChannel('netplay_demo_channel');
+            this.channel.onmessage = (event) => this.handleMessage(event.data);
+        } else {
+            console.warn("BroadcastChannel not supported, falling back to storage events");
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'netplay_message') {
+                    this.handleMessage(JSON.parse(e.newValue));
+                }
+            });
+        }
+    }
+
+    sendMessage(type, payload) {
+        const message = {
+            id: Date.now(),
+            senderId: gameApp.playerId,
+            type: type,
+            payload: payload,
+            timestamp: Date.now()
+        };
+
+        if (this.channel) {
+            this.channel.postMessage(message);
+        } else {
+            localStorage.setItem('netplay_message', JSON.stringify(message));
+            // Очистка чтобы триггернуть событие снова при следующем сообщении
+            setTimeout(() => localStorage.removeItem('netplay_message'), 100);
+        }
+    }
+
+    handleMessage(message) {
+        // Игнорируем свои же сообщения
+        if (message.senderId === gameApp.playerId) return;
+
+        if (this.listeners[message.type]) {
+            this.listeners[message.type](message.payload, message.senderId);
+        }
+    }
+
+    on(type, callback) {
+        this.listeners[type] = callback;
+    }
+}
+
+/**
+ * Основной класс игры
+ */
+class GameApplication {
+    constructor() {
+        this.network = new NetworkSimulator();
+        this.playerId = this.generateUUID();
+        this.nickname = '';
+        this.roomCode = null;
+        this.isHost = false;
+        this.players = []; // [{id, nickname}]
+        
+        // DOM Elements
+        this.screens = {
+            menu: document.getElementById('menu-screen'),
+            lobby: document.getElementById('lobby-screen'),
+            game: document.getElementById('game-screen')
+        };
+        
+        this.ui = {
+            nicknameInput: document.getElementById('nickname'),
+            joinCodeInput: document.getElementById('join-code'),
+            roomCodeDisplay: document.getElementById('display-room-code'),
+            playersList: document.getElementById('players-list'),
+            startBtn: document.getElementById('start-game-btn'),
+            toast: document.getElementById('toast')
+        };
+
+        this.bindEvents();
+        this.setupNetworkListeners();
+        
+        // Set random default nickname
+        this.ui.nicknameInput.value = `Player_${Math.floor(Math.random() * 1000)}`;
+    }
+
+    generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    showToast(msg) {
+        this.ui.toast.textContent = msg;
+        this.ui.toast.classList.add('show');
+        setTimeout(() => this.ui.toast.classList.remove('show'), 3000);
+    }
+
+    switchScreen(screenName) {
+        Object.values(this.screens).forEach(el => el.classList.remove('active'));
+        this.screens[screenName].classList.add('active');
+    }
+
+    bindEvents() {
+        // Enter key handling
+        this.ui.joinCodeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.joinRoom();
+        });
+    }
+
+    setupNetworkListeners() {
+        // Слушаем запросы на подключение к комнате
+        this.network.on('JOIN_REQUEST', (payload, senderId) => {
+            if (!this.isHost || this.roomCode !== payload.code) return;
+            
+            // Добавляем игрока
+            this.addPlayer(senderId, payload.nickname);
+            
+            // Отправляем подтверждение хоста всем в комнате
+            this.broadcastPlayerList();
+            this.showToast(`${payload.nickname} присоединился!`);
+        });
+
+        // Слушаем выход игрока
+        this.network.on('LEAVE_ROOM', (payload, senderId) => {
+            this.removePlayer(senderId);
+            this.broadcastPlayerList();
+        });
+
+        // Синхронизация списка игроков (для клиентов)
+        this.network.on('PLAYER_LIST_SYNC', (payload, senderId) => {
+            if (senderId === this.getHostId()) {
+                this.players = payload.players;
+                this.renderPlayersList();
+            }
+        });
+        
+        // Старт игры сигнал
+        this.network.on('GAME_START', () => {
+            this.startGameLoop();
+        });
+    }
+
+    getHostId() {
+        return this.isHost ? this.playerId : this.players.find(p => p.isHost)?.id;
+    }
+
+    createRoom() {
+        this.nickname = this.ui.nicknameInput.value.trim() || "Host";
+        this.roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        this.isHost = true;
+        this.players = [{ id: this.playerId, nickname: this.nickname, isHost: true }];
+        
+        this.ui.roomCodeDisplay.textContent = this.roomCode;
+        this.renderPlayersList();
+        this.switchScreen('lobby');
+        this.updateStartButton();
+        
+        this.showToast(`Комната ${this.roomCode} создана`);
+    }
+
+    joinRoom() {
+        const code = this.ui.joinCodeInput.value.trim().toUpperCase();
+        if (!code) {
+            this.showToast("Введите код комнаты");
+            return;
+        }
+
+        this.nickname = this.ui.nicknameInput.value.trim() || "Guest";
+        this.roomCode = code;
+        this.isHost = false;
+        
+        // В реальной игре тут был бы HTTP запрос или WebSocket connect
+        // Здесь просто отправляем broadcast сообщение
+        this.network.sendMessage('JOIN_REQUEST', { 
+            code: this.roomCode, 
+            nickname: this.nickname 
+        });
+
+        // Ждем ответа... если нет хоста, таймаут
+        let joined = false;
+        const checkJoinInterval = setInterval(() => {
+            if (this.players.length > 0 && !joined) {
+                clearInterval(checkJoinInterval);
+                joined = true;
+                this.ui.roomCodeDisplay.textContent = this.roomCode;
+                this.renderPlayersList();
+                this.switchScreen('lobby');
+                this.updateStartButton();
+                this.showToast("Вы вошли в комнату");
+            }
+        }, 100);
+
+        setTimeout(() => {
+            clearInterval(checkJoinInterval);
+            if(!joined) {
+                this.showToast("Ошибка: Комната не найдена или хост офлайн");
+                this.roomCode = null;
+            }
+        }, 3000);
+    }
+
+    addPlayer(id, nickname) {
+        if (!this.players.find(p => p.id === id)) {
+            this.players.push({ id, nickname, isHost: false });
+        }
+    }
+
+    removePlayer(id) {
+        this.players = this.players.filter(p => p.id !== id);
+    }
+
+    broadcastPlayerList() {
+        if (!this.isHost) return;
+        this.network.sendMessage('PLAYER_LIST_SYNC', { players: this.players });
+    }
+
+    renderPlayersList() {
+        this.ui.playersList.innerHTML = '';
+        this.players.forEach(player => {
+            const li = document.createElement('li');
+            li.className = 'player-item';
+            li.innerHTML = `
+                <span class="player-name">${player.nickname}</span>
+                <span><span class="status-indicator"></span>${player.isHost ? '(Хост)' : ''}</span>
+            `;
+            this.ui.playersList.appendChild(li);
+        });
+    }
+
+    updateStartButton() {
+        // Хост может начать только если есть хотя бы еще один игрок
+        const canStart = this.isHost && this.players.length >= 2;
+        this.ui.startBtn.disabled = !canStart;
+        this.ui.startBtn.style.opacity = canStart ? 1 : 0.5;
+    }
+
+    leaveRoom() {
+        this.network.sendMessage('LEAVE_ROOM', {});
+        this.resetGame();
+        this.switchScreen('menu');
+        this.showToast("Вы вышли из комнаты");
+    }
+
+    resetGame() {
+        this.roomCode = null;
+        this.isHost = false;
+        this.players = [];
+        this.ui.joinCodeInput.value = '';
+        this.ui.roomCodeDisplay.textContent = '------';
+    }
+
+    startGame() {
+        if (!this.isHost) return;
+        this.network.sendMessage('GAME_START', {});
+        this.startGameLoop();
+    }
+
+    startGameLoop() {
+        this.switchScreen('game');
+        this.initCanvas();
+    }
+
+    returnToLobby() {
+        this.stopGameLoop();
+        this.switchScreen('lobby');
+        this.updateStartButton();
+    }
+
+    stopGameLoop() {
+        cancelAnimationFrame(this.gameLoopId);
+    }
+
+    // --- Простая графическая заглушка на Canvas ---
+    canvasCtx = null;
+    gameObjects = [];
+    gameLoopId = null;
+
+    initCanvas() {
+        const canvas = document.getElementById('game-canvas');
+        this.canvasCtx = canvas.getContext('2d');
+        
+        // Retina support
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        this.canvasCtx.scale(dpr, dpr);
+
+        // Create simple objects representing players
+        this.gameObjects = this.players.map((p, index) => ({
+            x: 50 + index * 50,
+            y: 100,
+            radius: 15,
+            color: p.isHost ? '#00ffcc' : '#ff4444',
+            vx: (Math.random() - 0.5) * 2,
+            vy: (Math.random() - 0.5) * 2
+        }));
+
+        this.loop();
+    }
+
+    loop() {
+        if (!this.canvasCtx) return;
+        
+        const ctx = this.canvasCtx;
+        const w = ctx.canvas.clientWidth;
+        const h = ctx.canvas.clientHeight;
+
+        // Clear
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, w, h);
+
+        // Update & Draw
+        this.gameObjects.forEach(obj => {
+            obj.x += obj.vx;
+            obj.y += obj.vy;
+
+            // Bounce
+            if (obj.x < obj.radius || obj.x > w - obj.radius) obj.vx *= -1;
+            if (obj.y < obj.radius || obj.y > h - obj.radius) obj.vy *= -1;
+
+            ctx.beginPath();
+            ctx.arc(obj.x, obj.y, obj.radius, 0, Math.PI * 2);
+            ctx.fillStyle = obj.color;
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+
+        this.gameLoopId = requestAnimationFrame(() => this.loop());
+    }
+
+    exportState() {
+        const state = {
+            playerId: this.playerId,
+            roomCode: this.roomCode,
+            isHost: this.isHost,
+            players: this.players,
+            timestamp: new Date().toISOString()
+        };
+        const jsonStr = JSON.stringify(state, null, 2);
+        navigator.clipboard.writeText(jsonStr).then(() => {
+            this.showToast("Состояние скопировано в буфер обмена");
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+            alert(jsonStr);
+        });
+    }
+}
+
+// Запуск приложения
+const gameApp = new GameApplication();
+
+</script>
 </body>
 </html>
