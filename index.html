@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sergey's NetPlay - Matchmaking Edition</title>
+    <title>Sergey's NetPlay - Fixed Start</title>
     
     <!-- Firebase SDK via CDN -->
     <script type="module">
@@ -18,7 +18,6 @@
             onSnapshot, 
             query, 
             where, 
-            orderBy, 
             limit,
             serverTimestamp,
             runTransaction,
@@ -45,16 +44,12 @@
             console.error("❌ Firebase Error:", e);
         }
 
-        /**
-         * Сетевой сервис
-         */
         class NetworkService {
             constructor() {
                 this.db = db;
                 this.unsubs = [];
             }
 
-            // Создание комнаты
             async createRoom(nickname) {
                 const code = Math.random().toString(36).substring(2, 8).toUpperCase();
                 const playerId = crypto.randomUUID();
@@ -65,7 +60,7 @@
                         hostName: nickname,
                         createdAt: serverTimestamp(),
                         players: [{ id: playerId, nickname: nickname, isHost: true, x: 50, y: 50 }],
-                        status: "waiting", // waiting | playing
+                        status: "waiting",
                         lastUpdate: serverTimestamp()
                     });
                     return { roomId: docRef.id, code, playerId };
@@ -74,11 +69,9 @@
                 }
             }
 
-            // Поиск свободной комнаты (Matchmaking)
             async findOrCreateRoom(nickname) {
                 const playerId = crypto.randomUUID();
                 
-                // 1. Пробуем найти комнату со статусом waiting
                 const q = query(
                     collection(this.db, "rooms"),
                     where("status", "==", "waiting"),
@@ -89,17 +82,14 @@
                     const snapshot = await getDocs(q);
                     
                     if (!snapshot.empty) {
-                        // Нашли комнату! Присоединяемся.
                         const roomDoc = snapshot.docs[0];
                         const roomId = roomDoc.id;
                         const data = roomDoc.data();
 
-                        // Транзакция для безопасного входа
                         await runTransaction(this.db, async (transaction) => {
                             const ref = doc(this.db, "rooms", roomId);
                             const snap = await transaction.get(ref);
                             
-                            // Проверка актуальности (вдруг кто-то успел занять место)
                             if (!snap.exists() || snap.data().status !== "waiting") {
                                 throw new Error("ROOM_TAKEN");
                             }
@@ -120,20 +110,17 @@
 
                         return { roomId, code: data.code, playerId, joinedExisting: true };
                     } else {
-                        // Комнат нет. Создаем свою.
                         const res = await this.createRoom(nickname);
                         return { ...res, joinedExisting: false };
                     }
                 } catch (err) {
                     if (err.message === "ROOM_TAKEN") {
-                        // Повторная попытка поиска (рекурсия или цикл, но для демо просто ошибка)
                         throw new Error("Комната только что заполнилась. Попробуйте еще раз.");
                     }
                     throw err;
                 }
             }
 
-            // Вход по коду
             async joinByCode(code, nickname) {
                 const playerId = crypto.randomUUID();
                 const upperCode = code.toUpperCase();
@@ -176,7 +163,6 @@
                 return { roomId, code: upperCode, playerId };
             }
 
-            // Слушать изменения конкретной комнаты
             listenToRoom(roomId, onUpdate, onError) {
                 const unsub = onSnapshot(doc(this.db, "rooms", roomId), (docSnap) => {
                     if (docSnap.exists()) {
@@ -189,7 +175,6 @@
                 return unsub;
             }
 
-            // Обновление позиции
             updatePosition(roomId, playerId, newX, newY) {
                 return runTransaction(this.db, async (transaction) => {
                     const ref = doc(this.db, "rooms", roomId);
@@ -240,9 +225,6 @@
             }
         }
 
-        /**
-         * Приложение
-         */
         class GameApp {
             constructor() {
                 this.net = new NetworkService();
@@ -283,10 +265,8 @@
             }
 
             initUI() {
-                // Дефолтный ник
                 this.ui.inputs.nick.value = `Player_${Math.floor(Math.random() * 1000)}`;
                 
-                // Обработчики кнопок
                 document.getElementById('btn-create').onclick = () => this.handleCreate();
                 document.getElementById('btn-find').onclick = () => this.handleFindMatch();
                 document.getElementById('btn-join-code').onclick = () => this.handleJoinByCode();
@@ -309,8 +289,6 @@
                 this.ui.displays.toast.classList.add('show');
                 setTimeout(() => this.ui.displays.toast.classList.remove('show'), 3000);
             }
-
-            // --- Действия ---
 
             async handleCreate() {
                 this.nickname = this.ui.inputs.nick.value.trim() || "Host";
@@ -363,13 +341,7 @@
                 this.roomId = data.roomId;
                 this.roomCode = data.code;
                 
-                // Определяем роль
-                // Если мы присоединились к существующей, мы гость.
-                // Если создавали сами, мы хост.
-                // Но надежнее проверить по списку игроков после первого снапшота.
-                // Пока предположим: если joinedExisting == false -> Host, иначе Guest.
-                // В setupSession выше мы не передали флаг роли явно, давайте определим его позже через listener.
-                
+                // Сразу слушаем комнату
                 this.listenToRoom();
                 this.showScreen('lobby');
             }
@@ -382,16 +354,17 @@
                     (data) => {
                         this.players = data.players || [];
                         
-                        // Определение роли: если я первый в списке или has isHost:true with my ID
+                        // Определяем роль: если я первый в списке или помечен как Host
                         const me = this.players.find(p => p.id === this.playerId);
                         this.isHost = me ? me.isHost : false;
 
                         this.renderLobby();
 
-                        // Автостарт, если все готовы (опционально, сейчас ручной старт)
-                        // if (data.status === 'playing' && !this.inGame) {
-                        //     this.startGameLoop();
-                        // }
+                        // ЕСЛИ СТАТУС ИЗМЕНИЛСЯ НА PLAYING И МЫ ЕЩЕ НЕ В ИГРЕ -> ЗАПУСКАЕМ ЦИКЛ
+                        // Это важно для гостя, который узнает о старте от хоста через базу
+                        if (data.status === "playing" && !this.inGame) {
+                             this.startGameLoop();
+                        }
                     },
                     (err) => {
                         console.error(err);
@@ -426,17 +399,20 @@
                 if (!this.isHost) return;
                 this.setStatus("Старт...");
                 try {
+                    // 1. Обновляем базу
                     await this.net.startGame(this.roomId);
-                    // Listener поймет изменение статуса и вызовет колбэк, но там проверка onSnapshot
-                    // Давайте принудительно начнем цикл здесь тоже, чтобы не ждать тика базы
+                    
+                    // 2. Принудительно запускаем цикл у себя (чтобы не ждать тика базы)
                     this.startGameLoop();
+                    
+                    this.showToast("Игра началась!");
                 } catch (e) {
                     alert("Ошибка старта: " + e.message);
                 }
             }
 
             startGameLoop() {
-                if (this.inGame) return;
+                if (this.inGame) return; // Защита от двойного запуска
                 this.inGame = true;
                 this.showScreen('game');
                 this.initCanvas();
@@ -497,7 +473,6 @@
                 
                 if (me) {
                     // Simple Movement (Random Walk for Demo)
-                    // In real game: Keyboard Input
                     me.x += (Math.random() - 0.5) * 3;
                     me.y += (Math.random() - 0.5) * 3;
 
@@ -517,12 +492,9 @@
 
                 // Draw All Players
                 this.players.forEach(player => {
-                    // Interpolation would be nice here, but direct draw is fine for demo
-                    
                     ctx.beginPath();
                     ctx.arc(player.x, player.y, 15, 0, Math.PI * 2);
                     
-                    // Color based on role or ID hash
                     if (player.isHost) {
                         ctx.fillStyle = '#00ffcc'; // Cyan
                     } else {
@@ -534,7 +506,6 @@
                     ctx.lineWidth = 2;
                     ctx.stroke();
 
-                    // Name tag
                     ctx.fillStyle = '#fff';
                     ctx.font = 'bold 12px Arial';
                     ctx.textAlign = 'center';
@@ -545,7 +516,6 @@
             }
         }
 
-        // Start App
         window.gameApp = new GameApp();
 
     </script>
