@@ -2,13 +2,13 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Multiplayer Test Fixed</title>
+    <title>Multiplayer Fixed</title>
     
     <!-- Импорт Firebase -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { 
-            getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc, query, where, limit, getDocs
+            getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc
         } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -30,17 +30,16 @@
             console.error("❌ Firebase Init Error:", e); 
         }
 
-        window.FB = {
-            db: db,
-            funcs: { collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc, query, where, limit, getDocs }
-        };
+        // Экспортируем функции в глобальную область для использования в обычном скрипте ниже
+        window.FB_DB = db;
+        window.FB_FUNCS = { collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc };
         
-        // Событие загрузки готово
-        window.dispatchEvent(new Event('fb-loaded'));
+        // Сообщаем главному скрипту, что всё готово
+        window.dispatchEvent(new Event('fb-ready'));
     </script>
 
     <style>
-        body { margin: 0; background: #111; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        body { margin: 0; background: #111; color: white; font-family: sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
         canvas { border: 2px solid #333; background: #1a1a1a; box-shadow: 0 0 20px rgba(0,0,0,0.8); display: none; cursor: crosshair;}
         
         /* UI Меню */
@@ -53,22 +52,13 @@
         button { background: #333; border: 1px solid #555; color: #fff; padding: 10px 20px; cursor: pointer; margin: 5px; transition: 0.2s; border-radius: 4px; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;}
         button:hover { background: #444; border-color: #fff; transform: translateY(-1px); }
         .btn-primary { background: #007bff; border-color: #007bff; color: #fff; }
-        .btn-primary:hover { background: #0056b3; }
         .btn-success { background: #28a745; border-color: #28a745; color: #fff; }
-        .btn-success:hover { background: #218838; }
         .btn-danger { background: #dc3545; border-color: #dc3545; color: #fff; }
-        .btn-danger:hover { background: #a71d2a; }
         
         #status-msg { margin-top: 10px; font-size: 12px; color: #aaa; min-height: 20px; word-wrap: break-word; }
-        #room-id-display { font-size: 24px; color: #ffcc00; margin: 10px 0; user-select: all; font-family: monospace; background: #222; padding: 5px; border-radius: 4px; display: inline-block;}
-        
         .stat-line { font-size: 14px; margin-bottom: 8px; text-shadow: 1px 1px 2px black; color: #ddd; }
         .highlight { color: #0af; font-weight: bold; }
         #hint { position: absolute; bottom: 10px; width: 100%; text-align: center; color: #666; font-size: 12px; pointer-events: none; display: none; }
-        
-        /* Toast notification for copy success */
-        #toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 4px; padding: 16px; position: fixed; z-index: 1000; bottom: 30px; left: 50%; transform: translateX(-50%); font-size: 14px; opacity: 0; transition: opacity 0.3s, visibility 0.3s; border: 1px solid #555;}
-        #toast.show { visibility: visible; opacity: 1; }
     </style>
 </head>
 <body>
@@ -105,17 +95,15 @@
     <div class="stat-line" style="color:#aa00ff;">XP: <span id="ui-xp">0</span></div>
     
     <button id="btn-copy-link" class="btn-success" style="pointer-events:auto; margin-top:10px; font-size:12px; padding:8px 15px; width: 100%;">
-        📋 Копировать ссылку для друга
+        📋 Копировать ссылку
     </button>
     
     <button id="btn-leave" class="btn-danger" style="pointer-events:auto; margin-top:5px; font-size:10px; padding:5px 10px; width: 100%;">
-        ВЫЙТИ ИЗ КОМНАТЫ
+        ВЫЙТИ
     </button>
 </div>
 
 <div id="hint">Управление: WASD / Стрелки.</div>
-
-<div id="toast">✅ Ссылка скопирована!</div>
 
 <script>
 // --- КОНФИГУРАЦИЯ ---
@@ -154,7 +142,10 @@ let myNickname = localStorage.getItem('mp_nickname') || 'Guest' + Math.floor(Mat
 let currentRoomId = null;
 let inGame = false;
 
-let myPlayer = { x: 100, y: 100, xp: 0, color: '#ffcc00', name: myNickname };
+// Фиксируем цвет один раз
+const MY_COLOR = getRandomColor(); 
+
+let myPlayer = { x: 100, y: 100, xp: 0, color: MY_COLOR, name: myNickname };
 let otherPlayers = {}; 
 let localOrbs = []; 
 let keys = {};
@@ -178,9 +169,14 @@ const els = {
     btnCopyLink: document.getElementById('btn-copy-link'),
     roomIdDisplay: document.getElementById('ui-room-id'),
     countDisplay: document.getElementById('ui-count'),
-    xpDisplay: document.getElementById('ui-xp'),
-    toast: document.getElementById('toast')
+    xpDisplay: document.getElementById('ui-xp')
 };
+
+// Получение контекста канваса (безопасно)
+let ctx = null;
+if (els.canvas) {
+    ctx = els.canvas.getContext('2d');
+}
 
 els.nicknameInput.value = myNickname;
 
@@ -193,8 +189,8 @@ els.nicknameInput.addEventListener('change', (e) => {
 // --- АВТОМАТИЧЕСКОЕ ПОДКЛЮЧЕНИЕ ПО ССЫЛКЕ ---
 window.addEventListener('load', () => {
     setTimeout(() => {
-        if (!window.FB || !window.FB.db) {
-            setStatus("⚠️ Ошибка: Firebase не загружен. Проверьте интернет.");
+        if (!window.FB_DB) {
+            setStatus("⚠️ Ошибка: Firebase не загружен.");
             return;
         }
         
@@ -202,7 +198,6 @@ window.addEventListener('load', () => {
         const roomParam = urlParams.get('room');
         
         if (roomParam) {
-            console.log("Auto-joining room:", roomParam);
             setStatus(`Подключение к ${roomParam}...`);
             startGameSession(roomParam.toUpperCase());
         }
@@ -226,16 +221,10 @@ function generateInviteUrl() {
 async function copyToClipboard(text) {
     try {
         await navigator.clipboard.writeText(text);
-        showToast();
+        alert("Ссылка скопирована!");
     } catch (err) {
-        console.error('Не удалось скопировать текст:', err);
         alert("Ошибка копирования. Скопируйте вручную из адресной строки.");
     }
-}
-
-function showToast() {
-    els.toast.className = "show";
-    setTimeout(() => { els.toast.className = els.toast.className.replace("show", ""); }, 2000);
 }
 
 els.btnCopyLink.onclick = () => {
@@ -247,7 +236,7 @@ els.btnCopyLink.onclick = () => {
 // --- FIREBASE ЛОГИКА КОМНАТ ---
 
 async function createRoom() {
-    if (!window.FB.db) return showError("Firebase не загружен");
+    if (!window.FB_DB) return showError("Firebase не загружен");
     
     myNickname = els.nicknameInput.value.trim() || 'Guest';
     myPlayer.name = myNickname;
@@ -260,8 +249,8 @@ async function createRoom() {
     for(let i=0; i<6; i++) roomId += chars.charAt(Math.floor(Math.random() * chars.length));
     
     try {
-        await window.FB.funcs.setDoc(window.FB.funcs.doc(window.FB.db, "test_lobbies", roomId), {
-            createdAt: window.FB.funcs.serverTimestamp(),
+        await window.FB_FUNCS.setDoc(window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", roomId), {
+            createdAt: window.FB_FUNCS.serverTimestamp(),
             hostId: myId,
             status: "open"
         });
@@ -270,7 +259,7 @@ async function createRoom() {
     } catch (e) {
         console.error(e);
         if (e.code === 'permission-denied') {
-            showError("❌ ДОСТУП ЗАПРЕЩЕН! Измените Firestore Rules в консоли Firebase.");
+            showError("❌ ДОСТУП ЗАПРЕЩЕН! Измените Firestore Rules.");
         } else {
             showError("Ошибка создания: " + e.message);
         }
@@ -280,7 +269,7 @@ async function createRoom() {
 async function joinRoomManual() {
     const val = els.joinInput.value.trim().toUpperCase();
     if (!val) return showError("Введите ID");
-    if (!window.FB.db) return showError("Firebase не загружен");
+    if (!window.FB_DB) return showError("Firebase не загружен");
     
     myNickname = els.nicknameInput.value.trim() || 'Guest';
     myPlayer.name = myNickname;
@@ -288,7 +277,6 @@ async function joinRoomManual() {
 
     setStatus("Проверка комнаты...");
     
-    // Просто пробуем войти. Если комнаты нет или прав нет, registerSelfInRoom выбросит ошибку.
     startGameSession(val);
 }
 
@@ -317,22 +305,21 @@ function startGameSession(roomId) {
 }
 
 async function registerSelfInRoom() {
-    const ref = window.FB.funcs.doc(window.FB.db, "test_lobbies", currentRoomId, "players", myId);
+    const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "players", myId);
     try {
-        await window.FB.funcs.setDoc(ref, {
+        await window.FB_FUNCS.setDoc(ref, {
             x: myPlayer.x,
             y: myPlayer.y,
             color: myPlayer.color,
             name: myPlayer.name,
-            timestamp: window.FB.funcs.serverTimestamp()
+            timestamp: window.FB_FUNCS.serverTimestamp()
         });
+        console.log("Registered self successfully");
     } catch (e) {
         console.error("Register error:", e);
-        leaveRoom(); // Возвращаемся в меню при ошибке
+        leaveRoom(); 
         if (e.code === 'permission-denied') {
-            showError("❌ НЕЛЬЗЯ ВОЙТИ: Права доступа заблокированы. Исправьте Rules.");
-        } else if (e.code === 'unavailable') {
-             showError("❌ Сервис недоступен. Попробуйте позже.");
+            showError("❌ НЕЛЬЗЯ ВОЙТИ: Права доступа заблокированы.");
         } else {
             showError("Ошибка входа: " + e.message);
         }
@@ -340,40 +327,37 @@ async function registerSelfInRoom() {
 }
 
 function listenToPlayersInRoom() {
-    const colRef = window.FB.funcs.collection(window.FB.db, "test_lobbies", currentRoomId, "players");
+    const colRef = window.FB_FUNCS.collection(window.FB_DB, "test_lobbies", currentRoomId, "players");
     
-    unsubscribeRoom = window.FB.funcs.onSnapshot(colRef, (snapshot) => {
+    unsubscribeRoom = window.FB_FUNCS.onSnapshot(colRef, (snapshot) => {
+        const currentOtherPlayers = {};
+        
         snapshot.forEach(docChange => {
             const data = docChange.data();
             const playerId = docChange.id;
 
             if (playerId === myId) return;
 
-            if (docChange.type === 'added' || docChange.type === 'modified') {
-                if (!otherPlayers[playerId]) {
-                    otherPlayers[playerId] = {
-                        x: data.x, y: data.y,
-                        targetX: data.x, targetY: data.y,
-                        color: data.color || getRandomColor(),
-                        name: data.name || "Unknown"
-                    };
-                } else {
-                    otherPlayers[playerId].targetX = data.x;
-                    otherPlayers[playerId].targetY = data.y;
-                    if(data.name) otherPlayers[playerId].name = data.name;
-                    
-                    const dist = Math.hypot(otherPlayers[playerId].x - data.x, otherPlayers[playerId].y - data.y);
-                    if(dist > 100) {
-                         otherPlayers[playerId].x = data.x;
-                         otherPlayers[playerId].y = data.y;
-                    }
-                }
-            } else if (docChange.type === 'removed') {
-                delete otherPlayers[playerId];
+            currentOtherPlayers[playerId] = {
+                x: data.x, 
+                y: data.y,
+                targetX: data.x, 
+                targetY: data.y,
+                color: data.color || '#ffffff',
+                name: data.name || "Unknown"
+            };
+            
+            if (otherPlayers[playerId]) {
+                 currentOtherPlayers[playerId].x = otherPlayers[playerId].x;
+                 currentOtherPlayers[playerId].y = otherPlayers[playerId].y;
             }
         });
+
+        otherPlayers = currentOtherPlayers;
         
-        els.countDisplay.textContent = Object.keys(otherPlayers).length + 1;
+        const totalOnline = Object.keys(otherPlayers).length + 1;
+        els.countDisplay.textContent = totalOnline;
+
     }, (err) => {
         console.error(err);
         if (err.code === 'permission-denied') {
@@ -386,21 +370,21 @@ function listenToPlayersInRoom() {
 }
 
 function listenToOrbsInRoom() {
-    const colRef = window.FB.funcs.collection(window.FB.db, "test_lobbies", currentRoomId, "orbs");
+    const colRef = window.FB_FUNCS.collection(window.FB_DB, "test_lobbies", currentRoomId, "orbs");
     
-    unsubscribeOrbs = window.FB.funcs.onSnapshot(colRef, (snap) => {
+    unsubscribeOrbs = window.FB_FUNCS.onSnapshot(colRef, (snap) => {
         localOrbs = [];
         snap.forEach(doc => {
             const d = doc.data();
             localOrbs.push({ id: doc.id, x: d.x, y: d.y });
         });
     }, (err) => {
-        console.warn("Orbs listener error (might be empty initially):", err);
+        console.warn("Orbs listener error:", err);
     });
 
     if(orbSpawnInterval) clearInterval(orbSpawnInterval);
     orbSpawnInterval = setInterval(async () => {
-        if (!inGame || !window.FB.db) return;
+        if (!inGame || !window.FB_DB) return;
         if (localOrbs.length < 5) {
             const rx = 50 + Math.random() * (CANVAS_W - 100);
             const ry = 50 + Math.random() * (CANVAS_H - 100);
@@ -410,27 +394,25 @@ function listenToOrbsInRoom() {
             
             if (MAP[tileY] && MAP[tileY][tileX] === 0) {
                 try {
-                    await window.FB.funcs.addDoc(colRef, { x: rx, y: ry });
-                } catch(e) {
-                    // Ignore individual orb creation errors to not spam console
-                }
+                    await window.FB_FUNCS.addDoc(colRef, { x: rx, y: ry });
+                } catch(e) {}
             }
         }
     }, 2000);
 }
 
 async function syncPosition() {
-    if (!inGame || !window.FB.db) return;
+    if (!inGame || !window.FB_DB) return;
     const now = Date.now();
     if (now - lastSyncTime < SYNC_INTERVAL_MS) return;
     lastSyncTime = now;
 
-    const ref = window.FB.funcs.doc(window.FB.db, "test_lobbies", currentRoomId, "players", myId);
-    await window.FB.funcs.updateDoc(ref, {
+    const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "players", myId);
+    await window.FB_FUNCS.updateDoc(ref, {
         x: myPlayer.x,
         y: myPlayer.y,
         name: myPlayer.name,
-        timestamp: window.FB.funcs.serverTimestamp()
+        timestamp: window.FB_FUNCS.serverTimestamp()
     }).catch(e => {
         if(e.code !== 'not-found') console.warn("Sync fail", e);
     });
@@ -438,8 +420,8 @@ async function syncPosition() {
 
 async function collectOrb(id) {
     if (!inGame) return;
-    const ref = window.FB.funcs.doc(window.FB.db, "test_lobbies", currentRoomId, "orbs", id);
-    await window.FB.funcs.deleteDoc(ref).catch(e => {});
+    const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "orbs", id);
+    await window.FB_FUNCS.deleteDoc(ref).catch(e => {});
     
     myPlayer.xp += 10;
     updateUI();
@@ -454,9 +436,9 @@ function leaveRoom() {
     if (unsubscribeOrbs) unsubscribeOrbs();
     if (orbSpawnInterval) clearInterval(orbSpawnInterval);
     
-    if (window.FB.db && oldRoomId) {
-        const ref = window.FB.funcs.doc(window.FB.db, "test_lobbies", oldRoomId, "players", myId);
-        window.FB.funcs.deleteDoc(ref).catch(()=>{});
+    if (window.FB_DB && oldRoomId) {
+        const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", oldRoomId, "players", myId);
+        window.FB_FUNCS.deleteDoc(ref).catch(()=>{});
     }
 
     history.replaceState(null, "", window.location.pathname);
@@ -529,9 +511,8 @@ function interpolateOthers() {
     }
 }
 
-const ctx = els.canvas.getContext('2d');
-
 function drawMap() {
+    if (!ctx) return;
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.strokeStyle = '#333';
@@ -549,6 +530,7 @@ function drawMap() {
 }
 
 function drawPlayer(x, y, color, label, isMe = false) {
+    if (!ctx) return;
     ctx.beginPath();
     ctx.arc(x, y + 5, PLAYER_RADIUS * 0.8, 0, Math.PI*2);
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -587,7 +569,7 @@ function drawPlayer(x, y, color, label, isMe = false) {
 }
 
 function render() {
-    if (!inGame) return;
+    if (!inGame || !ctx) return;
     
     drawMap();
 
@@ -645,9 +627,9 @@ function showError(msg) {
 }
 
 window.addEventListener('beforeunload', () => {
-    if (inGame && window.FB.db && currentRoomId) {
-        const ref = window.FB.funcs.doc(window.FB.db, "test_lobbies", currentRoomId, "players", myId);
-        window.FB.funcs.deleteDoc(ref);
+    if (inGame && window.FB_DB && currentRoomId) {
+        const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "players", myId);
+        window.FB_FUNCS.deleteDoc(ref);
     }
 });
 
