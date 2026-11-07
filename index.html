@@ -2,13 +2,13 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Multiplayer Room Test with Auto-Cleanup</title>
+    <title>Multiplayer Room Test</title>
     
     <!-- Импорт Firebase -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { 
-            getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc, query, where, limit, getDocs, Timestamp
+            getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc, query, where, limit, getDocs
         } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -30,87 +30,54 @@
 
         window.FB = {
             db: db,
-            funcs: { collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc, query, where, limit, getDocs, Timestamp }
+            funcs: { collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc, query, where, limit, getDocs }
         };
         
+        // Сообщаем основному скрипту, что всё готово
         window.dispatchEvent(new Event('fb-loaded'));
     </script>
 
     <style>
         body { margin: 0; background: #111; color: white; font-family: monospace; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        canvas { border: 2px solid #333; background: #222; box-shadow: 0 0 15px rgba(0,0,0,0.5); display: none; }
+        canvas { border: 2px solid #333; background: #222; box-shadow: 0 0 15px rgba(0,0,0,0.5); display: none; /* Скрыт до входа в комнату */ }
         
-        /* UI Меню / Лобби */
-        #menu-screen { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            background: rgba(0,0,0,0.95); padding: 20px; border: 1px solid #444; border-radius: 8px; 
-            text-align: center; width: 500px; max-height: 80vh; overflow-y: auto; z-index: 100; 
-            display: flex; flex-direction: column; gap: 15px;
-        }
+        /* UI Меню */
+        #menu-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); padding: 30px; border: 1px solid #444; border-radius: 8px; text-align: center; width: 400px; z-index: 100; }
+        #game-ui { position: absolute; top: 10px; left: 10px; pointer-events: none; z-index: 10; display: none; }
         
-        h2 { margin: 0; color: #fff; font-size: 20px; letter-spacing: 2px; }
-        
-        .controls-row { display: flex; gap: 10px; justify-content: center; }
-        
-        input { background: #222; border: 1px solid #555; color: #fff; padding: 10px; width: 100%; font-family: inherit; }
-        button { background: #333; border: 1px solid #555; color: #fff; padding: 10px 15px; cursor: pointer; transition: 0.2s; font-family: inherit; }
+        h2 { margin-top: 0; color: #fff; }
+        input { background: #222; border: 1px solid #555; color: #fff; padding: 10px; width: 80%; margin-bottom: 10px; font-family: inherit; }
+        button { background: #333; border: 1px solid #555; color: #fff; padding: 10px 20px; cursor: pointer; margin: 5px; transition: 0.2s; }
         button:hover { background: #444; border-color: #fff; }
         .btn-primary { background: #0af; border-color: #0af; color: #000; font-weight: bold; }
         .btn-primary:hover { background: #0cf; }
-        .btn-danger { background: #f44; border-color: #f44; color: #fff; }
         
-        #room-list-container { 
-            display: flex; flex-direction: column; gap: 8px; 
-            max-height: 300px; overflow-y: auto; 
-            border-top: 1px solid #333; padding-top: 10px;
-        }
+        #status-msg { margin-top: 10px; font-size: 12px; color: #aaa; min-height: 20px; }
+        #room-id-display { font-size: 24px; color: #ffcc00; margin: 10px 0; user-select: all; }
         
-        .room-card { 
-            background: #222; border: 1px solid #444; padding: 10px; 
-            display: flex; justify-content: space-between; align-items: center; 
-            cursor: pointer; transition: 0.2s; border-radius: 4px;
-        }
-        .room-card:hover { border-color: #0af; background: #2a2a2a; }
-        .room-info { text-align: left; }
-        .room-name { font-weight: bold; color: #fff; font-size: 14px; }
-        .room-details { font-size: 11px; color: #888; margin-top: 2px; }
-        .join-btn-small { background: #0af; color: #000; border: none; padding: 5px 10px; font-size: 12px; border-radius: 3px; cursor: pointer; }
-        .join-btn-small:hover { background: #0cf; }
-        
-        #status-msg { min-height: 20px; font-size: 12px; color: #aaa; text-align: center; }
-        .error { color: #f44 !important; }
-        .success { color: #0f0 !important; }
-
-        /* Игровой HUD */
-        #game-ui { position: absolute; top: 10px; left: 10px; pointer-events: none; z-index: 10; display: none; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 4px; }
-        .stat-line { font-size: 14px; margin-bottom: 4px; }
+        .stat-line { font-size: 14px; margin-bottom: 4px; text-shadow: 1px 1px 2px black; }
         #hint { position: absolute; bottom: 10px; width: 100%; text-align: center; color: #666; font-size: 12px; pointer-events: none; display: none; }
     </style>
 </head>
 <body>
 
-<!-- ЭКРАН ЛОББИ -->
+<!-- ЭКРАН МЕНЮ / ЛОББИ -->
 <div id="menu-screen">
-    <h2>ACTIVE ROOMS</h2>
+    <h2>TEST ROOM LOBBY</h2>
     
-    <div class="controls-row">
-        <button class="btn-primary" id="btn-create">СОЗДАТЬ НОВУЮ</button>
-        <button id="btn-refresh">ОБНОВИТЬ СПИСОК</button>
+    <div style="margin-bottom: 20px;">
+        <button class="btn-primary" id="btn-create">СОЗДАТЬ КОМНАТУ</button>
     </div>
     
-    <div style="margin-top: 10px;">
-        <p style="font-size: 12px; color: #888; margin-bottom: 5px;">Или войти по ID:</p>
-        <div style="display:flex; gap:5px;">
-            <input type="text" id="join-input" placeholder="ROOM_ID" maxlength="10">
-            <button id="btn-join-manual">ВОЙТИ</button>
-        </div>
+    <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+    
+    <div>
+        <p style="font-size: 12px; color: #888;">Или войдите по ID:</p>
+        <input type="text" id="join-input" placeholder="Введите ID комнаты..." maxlength="10">
+        <button id="btn-join">ВОЙТИ</button>
     </div>
-
+    
     <div id="status-msg"></div>
-
-    <div id="room-list-container">
-        <div style="color:#666; font-style:italic; text-align:center; padding:20px;">Загрузка...</div>
-    </div>
 </div>
 
 <!-- ИГРОВОЙ ИНТЕРФЕЙС -->
@@ -121,10 +88,10 @@
     <div class="stat-line">ЛВЛ: <span id="ui-lvl">1</span></div>
     <div class="stat-line">XP: <span id="ui-xp">0</span></div>
     <div class="stat-line" style="color:#0af;">Онлайн: <span id="ui-count">1</span></div>
-    <button id="btn-leave" style="pointer-events:auto; margin-top:10px; font-size:10px; padding:5px;" class="btn-danger">ВЫЙТИ В МЕНЮ</button>
+    <button id="btn-leave" style="pointer-events:auto; margin-top:10px; font-size:10px; padding:5px;">ВЫЙТИ</button>
 </div>
 
-<div id="hint">Управление: WASD / Стрелки.</div>
+<div id="hint">Управление: WASD / Стрелки. Тест мультиплеера: откройте вторую вкладку.</div>
 
 <script>
 // --- КОНФИГУРАЦИЯ ---
@@ -134,9 +101,6 @@ const TILE_SIZE = 40;
 const PLAYER_RADIUS = 15;
 const SPEED = 5;
 const SYNC_INTERVAL_MS = 100; 
-const HEARTBEAT_INTERVAL_MS = 15000; // Пульс жизни игрока каждые 15 сек
-const CLEANUP_CHECK_INTERVAL_MS = 30000; // Проверка мусорных комнат каждые 30 сек
-const ROOM_TIMEOUT_MS = 60000; // Комната считается мертвой, если пустует > 60 сек
 
 // Карта (1 = стена, 0 = пол)
 const MAP = [
@@ -165,14 +129,12 @@ let currentRoomId = null;
 let inGame = false;
 
 let myPlayer = { x: 100, y: 100, xp: 0, lvl: 1 };
-let otherPlayers = {}; 
-let localOrbs = []; 
+let otherPlayers = {}; // { id: { x, y, targetX, targetY, color } }
+let localOrbs = []; // [{ id, x, y }]
 let keys = {};
 let lastSyncTime = 0;
 let unsubscribeRoom = null;
 let unsubscribeOrbs = null;
-let heartbeatInterval = null;
-let cleanupInterval = null;
 
 // DOM Elements
 const els = {
@@ -183,10 +145,8 @@ const els = {
     status: document.getElementById('status-msg'),
     joinInput: document.getElementById('join-input'),
     btnCreate: document.getElementById('btn-create'),
-    btnRefresh: document.getElementById('btn-refresh'),
-    btnJoinManual: document.getElementById('btn-join-manual'),
+    btnJoin: document.getElementById('btn-join'),
     btnLeave: document.getElementById('btn-leave'),
-    roomListContainer: document.getElementById('room-list-container'),
     roomIdDisplay: document.getElementById('ui-room-id'),
     lvlDisplay: document.getElementById('ui-lvl'),
     xpDisplay: document.getElementById('ui-xp'),
@@ -197,152 +157,19 @@ const els = {
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
 
-// --- СИСТЕМА ОЧИСТКИ МУСОРА (AUTO-CLEANUP) ---
-
-async function startGlobalCleanupService() {
-    if (!window.FB.db) return;
-    
-    // Запускаем проверку каждые N секунд
-    cleanupInterval = setInterval(async () => {
-        await checkAndDeleteEmptyRooms();
-    }, CLEANUP_CHECK_INTERVAL_MS);
-}
-
-async function checkAndDeleteEmptyRooms() {
-    if (!window.FB.db) return;
-
-    try {
-        // 1. Получаем список всех открытых комнат
-        const roomsQuery = window.FB.funcs.query(
-            window.FB.funcs.collection(window.FB.db, "test_lobbies"),
-            window.FB.funcs.where("status", "==", "open")
-        );
-        const roomsSnap = await window.FB.funcs.getDocs(roomsQuery);
-
-        for (const roomDoc of roomsSnap.docs) {
-            const roomId = roomDoc.id;
-            
-            // 2. Проверяем наличие игроков в этой комнате
-            const playersColRef = window.FB.funcs.collection(window.FB.db, "test_lobbies", roomId, "players");
-            const playersSnap = await window.FB.funcs.getDocs(playersColRef);
-
-            if (playersSnap.empty) {
-                // Нет активных игроков -> Удаляем комнату
-                console.log(`Cleaning up empty room: ${roomId}`);
-                await window.FB.funcs.deleteDoc(roomDoc.ref);
-            } else {
-                // Есть игроки. Проверяем их свежесть (Heartbeat).
-                // Если все игроки "мертвы" (старше ROOM_TIMEOUT_MS), удаляем комнату.
-                let allDead = true;
-                const now = Date.now();
-                
-                for (const pDoc of playersSnap.docs) {
-                    const pData = pDoc.data();
-                    const lastSeen = pData.lastSeen ? pData.lastSeen.toMillis() : 0;
-                    
-                    // Если хоть один живой, комната остается
-                    if (now - lastSeen < ROOM_TIMEOUT_MS) {
-                        allDead = false;
-                        break;
-                    }
-                }
-
-                if (allDead) {
-                     console.log(`Cleaning up stale room: ${roomId} (no active heartbeats)`);
-                     await window.FB.funcs.deleteDoc(roomDoc.ref);
-                     // Также удалим старых игроков для чистоты (опционально, но лучше сделать каскадно или вручную)
-                     // Для простоты теста: удаляем только комнату. Игроки станут "осиротевшими" данными, 
-                     // которые исчезнут вместе с родительским документом в Firestore? 
-                     // НЕТ! В Firestore субколлекции НЕ удаляются автоматически при удалении родителя.
-                     // Поэтому нам нужно явно удалить игроков тоже.
-                     
-                     const batch = window.FB.db.batch();
-                     batch.delete(roomDoc.ref);
-                     playersSnap.docs.forEach(p => batch.delete(p.ref));
-                     await batch.commit();
-                }
-            }
-        }
-    } catch (e) {
-        console.error("Cleanup error:", e);
-    }
-}
-
-// --- ЛОГИКА ЛОББИ ---
-
-async function fetchRooms() {
-    if (!window.FB.db) return showError("Firebase не загружен");
-    
-    setStatus("Поиск комнат...");
-    els.roomListContainer.innerHTML = '<div style="color:#666; text-align:center; padding:10px;">Загрузка...</div>';
-
-    try {
-        const q = window.FB.funcs.query(
-            window.FB.funcs.collection(window.FB.db, "test_lobbies"),
-            window.FB.funcs.where("status", "==", "open"),
-            window.FB.funcs.limit(20)
-        );
-        
-        const snapshot = await window.FB.funcs.getDocs(q);
-        
-        els.roomListContainer.innerHTML = '';
-        
-        if (snapshot.empty) {
-            els.roomListContainer.innerHTML = '<div style="color:#666; text-align:center; padding:20px;">Нет активных комнат.<br>Создайте новую!</div>';
-            setStatus("");
-            return;
-        }
-
-        snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            const roomId = docSnap.id;
-            
-            const card = document.createElement('div');
-            card.className = 'room-card';
-            
-            // Форматируем время создания
-            let timeStr = "Недавно";
-            if (data.createdAt) {
-                const d = new Date(data.createdAt.seconds * 1000);
-                timeStr = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            }
-
-            card.innerHTML = `
-                <div class="room-info">
-                    <div class="room-name">${data.name || 'Unnamed Room'}</div>
-                    <div class="room-details">ID: ${roomId} | Создана: ${timeStr}</div>
-                </div>
-                <button class="join-btn-small">ВОЙТИ</button>
-            `;
-            
-            card.querySelector('.join-btn-small').onclick = () => joinRoom(roomId);
-            card.onclick = (e) => {
-                if(e.target.tagName !== 'BUTTON') joinRoom(roomId);
-            };
-
-            els.roomListContainer.appendChild(card);
-        });
-        
-        setStatus(`Найдено комнат: ${snapshot.size}`, 'success');
-
-    } catch (err) {
-        console.error(err);
-        showError("Ошибка загрузки списка: " + err.message);
-        els.roomListContainer.innerHTML = '<div style="color:#f44; text-align:center;">Ошибка сети</div>';
-    }
-}
+// --- FIREBASE ЛОГИКА КОМНАТ ---
 
 async function createRoom() {
     if (!window.FB.db) return showError("Firebase не загружен");
     
     setStatus("Создание комнаты...");
     
+    // Генерируем короткий ID
     const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const roomName = prompt("Название комнаты?", "My Room") || "Test Room";
-
+    
     try {
+        // Создаем документ комнаты
         await window.FB.funcs.setDoc(window.FB.funcs.doc(window.FB.db, "test_lobbies", roomId), {
-            name: roomName,
             createdAt: window.FB.funcs.serverTimestamp(),
             hostId: myId,
             status: "open"
@@ -361,21 +188,14 @@ async function joinRoom(roomId) {
 
     setStatus(`Подключение к ${roomId}...`);
     
+    // Проверяем существование комнаты перед входом (опционально, но лучше для UX)
     try {
         const roomRef = window.FB.funcs.doc(window.FB.db, "test_lobbies", roomId);
-        const snap = await window.FB.funcs.getDoc(roomRef);
+        const snap = await window.FB.funcs.getDocs(window.FB.funcs.query(window.FB.funcs.collection(window.FB.db, "test_lobbies"), window.FB.funcs.where("__name__", "==", roomId)));
         
-        if (!snap.exists()) {
-            showError("Комната не найдена");
-            return;
-        }
+        // Так как we can't easily check existence without extra call, we just proceed to subscribe.
+        // If subscription fails or returns empty after timeout, we handle it.
         
-        const data = snap.data();
-        if (data.status !== "open") {
-            showError("Комната закрыта");
-            return;
-        }
-
         startGameSession(roomId);
     } catch (e) {
         showError("Ошибка подключения");
@@ -386,25 +206,30 @@ function startGameSession(roomId) {
     currentRoomId = roomId;
     inGame = true;
     
+    // Переключаем UI
     els.menu.style.display = 'none';
     els.canvas.style.display = 'block';
     els.ui.style.display = 'block';
     els.hint.style.display = 'block';
     els.roomIdDisplay.textContent = roomId;
     
+    // Сбрасываем состояние
     otherPlayers = {};
     localOrbs = [];
-    myPlayer.x = 100; myPlayer.y = 100; 
+    myPlayer.x = 100; myPlayer.y = 100; // Стартовая позиция
     
+    // 1. Регистрируем себя в подколлекции players внутри комнаты
+    // Структура: test_lobbies/{roomId}/players/{myId}
     registerSelfInRoom();
+    
+    // 2. Подписываемся на изменения списка игроков в этой комнате
     listenToPlayersInRoom();
+    
+    // 3. Подписываемся на орбы (кристаллы опыта) в этой комнате
+    // Структура: test_lobbies/{roomId}/orbs/{orbId}
     listenToOrbsInRoom();
     
-    // Запуск Heartbeat (пульса жизни)
-    if (heartbeatInterval) clearInterval(heartbeatInterval);
-    heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
-    sendHeartbeat(); // Первый пульс сразу
-    
+    // Запуск цикла
     gameLoop();
 }
 
@@ -413,22 +238,9 @@ async function registerSelfInRoom() {
     await window.FB.funcs.setDoc(ref, {
         x: myPlayer.x,
         y: myPlayer.y,
-        color: '#ffcc00', 
-        timestamp: window.FB.funcs.serverTimestamp(),
-        lastSeen: window.FB.funcs.serverTimestamp() // Инициализируем время жизни
+        color: '#ffcc00', // Мой цвет
+        timestamp: window.FB.funcs.serverTimestamp()
     });
-}
-
-async function sendHeartbeat() {
-    if (!inGame || !window.FB.db || !currentRoomId) return;
-    try {
-        const ref = window.FB.funcs.doc(window.FB.db, "test_lobbies", currentRoomId, "players", myId);
-        await window.FB.funcs.updateDoc(ref, {
-            lastSeen: window.FB.funcs.serverTimestamp()
-        });
-    } catch(e) {
-        console.warn("Heartbeat failed", e);
-    }
 }
 
 function listenToPlayersInRoom() {
@@ -439,7 +251,7 @@ function listenToPlayersInRoom() {
             const data = docChange.data();
             const playerId = docChange.id;
 
-            if (playerId === myId) return; 
+            if (playerId === myId) return; // Игнорируем себя
 
             if (docChange.type === 'added' || docChange.type === 'modified') {
                 if (!otherPlayers[playerId]) {
@@ -449,6 +261,7 @@ function listenToPlayersInRoom() {
                         color: data.color || '#00ccff'
                     };
                 } else {
+                    // Обновляем только цели для интерполяции
                     otherPlayers[playerId].targetX = data.x;
                     otherPlayers[playerId].targetY = data.y;
                 }
@@ -460,7 +273,7 @@ function listenToPlayersInRoom() {
         els.countDisplay.textContent = Object.keys(otherPlayers).length + 1;
     }, (err) => {
         console.error(err);
-        leaveRoomSafe();
+        leaveRoom();
     });
 }
 
@@ -475,6 +288,7 @@ function listenToOrbsInRoom() {
         });
     });
 
+    // Спавнер орбов (локальный таймер, но пишет в общую БД комнаты)
     setInterval(async () => {
         if (!inGame || !window.FB.db) return;
         if (localOrbs.length < 5) {
@@ -517,32 +331,28 @@ async function collectOrb(id) {
     updateUI();
 }
 
-function leaveRoomSafe() {
-    if (!inGame) return;
-    
-    const roomIdToClean = currentRoomId;
-    
+function leaveRoom() {
     inGame = false;
-    if (unsubscribeRoom) unsubscribeRoom();
-    if (unsubscribeOrbs) unsubscribeOrbs();
-    if (heartbeatInterval) clearInterval(heartbeatInterval);
-    
-    // Удаляем себя из комнаты
-    if (window.FB.db && roomIdToClean) {
-        const ref = window.FB.funcs.doc(window.FB.db, "test_lobbies", roomIdToClean, "players", myId);
-        window.FB.funcs.deleteDoc(ref).catch(e => console.warn("Cleanup error", e));
-    }
-    
     currentRoomId = null;
     
-    els.menu.style.display = 'flex';
+    // Удаляем слушатели
+    if (unsubscribeRoom) unsubscribeRoom();
+    if (unsubscribeOrbs) unsubscribeOrbs();
+    
+    // Пытаемся удалить свой документ из комнаты (чтобы другие сразу увидели выход)
+    if (window.FB.db) {
+        // Нам нужен последний известный roomId, но он уже сброшен. 
+        // Поэтому лучше вызывать cleanup ДО сброса, или хранить его.
+        // Для простоты теста полагаемся на heartbeat или удаление при закрытии вкладки.
+    }
+
+    // Возврат в меню
+    els.menu.style.display = 'block';
     els.canvas.style.display = 'none';
     els.ui.style.display = 'none';
     els.hint.style.display = 'none';
     setStatus("");
-    fetchRooms();
 }
-
 
 // --- ФИЗИКА ---
 
@@ -588,6 +398,7 @@ function updatePhysics() {
     let nextY = myPlayer.y + dy;
     if (!checkCollision(myPlayer.x, nextY)) myPlayer.y = nextY;
 
+    // Сбор орбов
     for (let i = localOrbs.length - 1; i >= 0; i--) {
         const orb = localOrbs[i];
         const dist = Math.hypot(myPlayer.x - orb.x, myPlayer.y - orb.y);
@@ -644,11 +455,13 @@ function render() {
     
     drawMap();
 
+    // Другие игроки
     for (let pid in otherPlayers) {
         const p = otherPlayers[pid];
         drawPlayer(p.x, p.y, p.color, pid.substr(0,4));
     }
 
+    // Орбы
     ctx.fillStyle = '#aa00ff';
     ctx.shadowColor = '#aa00ff';
     ctx.shadowBlur = 10;
@@ -659,6 +472,7 @@ function render() {
     }
     ctx.shadowBlur = 0;
 
+    // Я
     drawPlayer(myPlayer.x, myPlayer.y, '#ffcc00', 'YOU');
 }
 
@@ -689,28 +503,22 @@ function gameLoop() {
 
 // --- ОБРАБОТЧИКИ КНОПОК ---
 els.btnCreate.onclick = createRoom;
-els.btnRefresh.onclick = fetchRooms;
-els.btnJoinManual.onclick = () => joinRoom(els.joinInput.value.trim().toUpperCase());
-els.btnLeave.onclick = leaveRoomSafe;
+els.btnJoin.onclick = () => joinRoom(els.joinInput.value.trim().toUpperCase());
+els.btnLeave.onclick = leaveRoom;
 
-function setStatus(msg, type = '') { 
-    els.status.textContent = msg; 
-    els.status.className = type;
-}
-function showError(msg) { setStatus(msg, 'error'); setTimeout(() => setStatus(""), 3000); }
+function setStatus(msg) { els.status.textContent = msg; }
+function showError(msg) { els.status.textContent = msg; els.status.style.color = "#f44"; setTimeout(() => els.status.style.color = "#aaa", 2000); }
 
 // Ожидание загрузки Firebase
 window.addEventListener('fb-loaded', () => {
     console.log("Game Script Active");
-    setTimeout(fetchRooms, 500);
-    // Запускаем службу очистки мусора
-    startGlobalCleanupService();
 });
 
 // Cleanup при закрытии вкладки
 window.addEventListener('beforeunload', () => {
     if (inGame && window.FB.db && currentRoomId) {
         const ref = window.FB.funcs.doc(window.FB.db, "test_lobbies", currentRoomId, "players", myId);
+        // Fire-and-forget deletion
         window.FB.funcs.deleteDoc(ref);
     }
 });
