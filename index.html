@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Multiplayer Fixed</title>
+    <title>Dark Survival: Always Works</title>
     
     <!-- Импорт Firebase -->
     <script type="module">
@@ -26,133 +26,165 @@
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             console.log("✅ Firebase Initialized");
+            
+            window.FB_DB = db;
+            window.FB_FUNCS = { collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc };
+            
+            // Глобальный флаг готовности сети
+            window.NETWORK_READY = true;
         } catch (e) { 
             console.error("❌ Firebase Init Error:", e); 
+            window.NETWORK_READY = false;
         }
-
-        // Экспортируем функции в глобальную область для использования в обычном скрипте ниже
-        window.FB_DB = db;
-        window.FB_FUNCS = { collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc };
-        
-        // Сообщаем главному скрипту, что всё готово
-        window.dispatchEvent(new Event('fb-ready'));
     </script>
 
     <style>
-        body { margin: 0; background: #111; color: white; font-family: sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        canvas { border: 2px solid #333; background: #1a1a1a; box-shadow: 0 0 20px rgba(0,0,0,0.8); display: none; cursor: crosshair;}
+        body { margin: 0; background: #000; color: white; font-family: 'Courier New', monospace; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { border: 2px solid #222; background: #050505; box-shadow: 0 0 30px rgba(0,0,0,0.9); cursor: none; }
         
         /* UI Меню */
         #menu-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(10,10,10,0.95); padding: 30px; border: 1px solid #444; border-radius: 8px; text-align: center; width: 400px; z-index: 100; backdrop-filter: blur(5px);}
         #game-ui { position: absolute; top: 10px; left: 10px; pointer-events: none; z-index: 10; display: none; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; border: 1px solid #444;}
         
-        h2 { margin-top: 0; color: #fff; letter-spacing: 1px; }
+        h2 { margin-top: 0; color: #fff; letter-spacing: 1px; text-transform: uppercase; }
         input { background: #222; border: 1px solid #555; color: #fff; padding: 10px; width: calc(100% - 22px); margin-bottom: 10px; font-family: inherit; outline: none; transition: 0.2s;}
-        input:focus { border-color: #0af; }
+        input:focus { border-color: #f00; }
         button { background: #333; border: 1px solid #555; color: #fff; padding: 10px 20px; cursor: pointer; margin: 5px; transition: 0.2s; border-radius: 4px; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;}
         button:hover { background: #444; border-color: #fff; transform: translateY(-1px); }
-        .btn-primary { background: #007bff; border-color: #007bff; color: #fff; }
-        .btn-success { background: #28a745; border-color: #28a745; color: #fff; }
-        .btn-danger { background: #dc3545; border-color: #dc3545; color: #fff; }
+        .btn-primary { background: #800000; border-color: #ff0000; color: #fff; }
+        .btn-success { background: #004400; border-color: #00ff00; color: #fff; }
+        .btn-danger { background: #440000; border-color: #ff0000; color: #fff; }
         
         #status-msg { margin-top: 10px; font-size: 12px; color: #aaa; min-height: 20px; word-wrap: break-word; }
         .stat-line { font-size: 14px; margin-bottom: 8px; text-shadow: 1px 1px 2px black; color: #ddd; }
-        .highlight { color: #0af; font-weight: bold; }
+        .highlight { color: #f00; font-weight: bold; }
         #hint { position: absolute; bottom: 10px; width: 100%; text-align: center; color: #666; font-size: 12px; pointer-events: none; display: none; }
+        
+        /* Кастомный курсор-фонарик */
+        #custom-cursor {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 200, 0.8);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px rgba(255, 255, 200, 0.5);
+            display: none;
+        }
     </style>
 </head>
 <body>
 
+<div id="custom-cursor"></div>
+
 <!-- ЭКРАН МЕНЮ / ЛОББИ -->
 <div id="menu-screen">
-    <h2>MULTIPLAYER TEST</h2>
+    <h2>DARK SURVIVAL</h2>
     
     <div style="margin-bottom: 15px;">
-        <input type="text" id="nickname-input" placeholder="Введите ваш никнейм..." maxlength="12" value="">
+        <input type="text" id="nickname-input" placeholder="Ваш никнейм..." maxlength="12" value="">
     </div>
 
     <div style="margin-bottom: 20px;">
-        <button class="btn-primary" id="btn-create">СОЗДАТЬ НОВУЮ КОМНАТУ</button>
+        <button class="btn-primary" id="btn-play-single">ИГРАТЬ ОДИН (OFFLINE)</button>
+        <br>
+        <button class="btn-success" id="btn-create-multi">СОЗДАТЬ МУЛЬТИПЛЕР</button>
     </div>
     
     <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
     
     <div>
-        <p style="font-size: 12px; color: #888;">Или присоединитесь по ID:</p>
-        <input type="text" id="join-input" placeholder="Введите ID комнаты..." maxlength="10" autocomplete="off">
+        <p style="font-size: 12px; color: #888;">Присоединиться по ID:</p>
+        <input type="text" id="join-input" placeholder="ID комнаты..." maxlength="10" autocomplete="off">
         <button id="btn-join">ВОЙТИ</button>
     </div>
     
-    <div id="status-msg"></div>
+    <div id="status-msg">Готов к игре.</div>
 </div>
 
 <!-- ИГРОВОЙ ИНТЕРФЕЙС -->
 <canvas id="gameCanvas" width="800" height="600"></canvas>
 
 <div id="game-ui">
-    <div class="stat-line">Комната: <span id="ui-room-id" class="highlight"></span></div>
+    <div class="stat-line">Режим: <span id="ui-mode" class="highlight">SINGLE</span></div>
+    <div class="stat-line">Комната: <span id="ui-room-id" class="highlight">--</span></div>
     <div class="stat-line">Онлайн: <span id="ui-count" class="highlight">1</span></div>
     <div class="stat-line" style="color:#aa00ff;">XP: <span id="ui-xp">0</span></div>
+    <div class="stat-line" style="color:#f00;">HP: <span id="ui-hp">100</span>%</div>
     
     <button id="btn-copy-link" class="btn-success" style="pointer-events:auto; margin-top:10px; font-size:12px; padding:8px 15px; width: 100%;">
         📋 Копировать ссылку
     </button>
     
     <button id="btn-leave" class="btn-danger" style="pointer-events:auto; margin-top:5px; font-size:10px; padding:5px 10px; width: 100%;">
-        ВЫЙТИ
+        ВЫЙТИ В МЕНЮ
     </button>
 </div>
 
-<div id="hint">Управление: WASD / Стрелки.</div>
+<div id="hint">Управление: WASD / Стрелки. Мышь направляет свет.</div>
 
 <script>
 // --- КОНФИГУРАЦИЯ ---
 const CANVAS_W = 800;
 const CANVAS_H = 600;
 const TILE_SIZE = 40;
-const PLAYER_RADIUS = 15;
-const SPEED = 4;
+const PLAYER_RADIUS = 12;
+const MONSTER_RADIUS = 15;
+const BASE_SPEED = 150; // Пикселей в секунду
 const SYNC_INTERVAL_MS = 50;
 const INTERPOLATION_FACTOR = 0.15;
+const LIGHT_DISTANCE = 350; 
 
-const MAP = [
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,1,1,1,0,0,0,0,0,0,0,1,1,1,0,0,0,1],
-    [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
-    [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
-    [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
-    [1,0,0,1,1,1,0,0,0,0,0,0,0,1,1,1,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-];
+// Карта 40x30
+const MAP_COLS = 40;
+const MAP_ROWS = 30;
+let MAP = [];
+
+function generateMap() {
+    MAP = Array(MAP_ROWS).fill().map(() => Array(MAP_COLS).fill(0));
+    for(let i=0; i<MAP_COLS; i++) { MAP[0][i] = 1; MAP[MAP_ROWS-1][i] = 1; }
+    for(let i=0; i<MAP_ROWS; i++) { MAP[i][0] = 1; MAP[i][MAP_COLS-1] = 1; }
+
+    // Простой генератор стен
+    for(let r=2; r<MAP_ROWS-2; r+=2) {
+        for(let c=2; c<MAP_COLS-2; c+=2) {
+            if(Math.random() > 0.6) {
+                let len = Math.floor(Math.random() * 3) + 1;
+                for(let k=0; k<len && r+k < MAP_ROWS-1; k++) MAP[r+k][c] = 1;
+            }
+            if(Math.random() > 0.6) {
+                let len = Math.floor(Math.random() * 3) + 1;
+                for(let k=0; k<len && c+k < MAP_COLS-1; k++) MAP[r][c+k] = 1;
+            }
+        }
+    }
+}
+generateMap();
 
 // --- СОСТОЯНИЕ ---
 let myId = sessionStorage.getItem('mp_player_id') || ('p_' + Math.random().toString(36).substr(2, 6));
 sessionStorage.setItem('mp_player_id', myId);
 
-let myNickname = localStorage.getItem('mp_nickname') || 'Guest' + Math.floor(Math.random() * 100);
+let myNickname = localStorage.getItem('mp_nickname') || 'Survivor' + Math.floor(Math.random() * 100);
 
 let currentRoomId = null;
 let inGame = false;
+let isMultiplayer = false; // Флаг режима
 
-// Фиксируем цвет один раз
-const MY_COLOR = getRandomColor(); 
-
-let myPlayer = { x: 100, y: 100, xp: 0, color: MY_COLOR, name: myNickname };
+let myPlayer = { x: 100, y: 100, xp: 0, hp: 100, color: '#ffffcc', name: myNickname };
 let otherPlayers = {}; 
+let monsters = []; 
 let localOrbs = []; 
 let keys = {};
+let mousePos = { x: 0, y: 0 };
 let lastSyncTime = 0;
 let unsubscribeRoom = null;
 let unsubscribeOrbs = null;
 let orbSpawnInterval = null;
+let monsterSpawnInterval = null;
+let lastFrameTime = performance.now();
 
 // DOM Elements
 const els = {
@@ -163,43 +195,44 @@ const els = {
     status: document.getElementById('status-msg'),
     joinInput: document.getElementById('join-input'),
     nicknameInput: document.getElementById('nickname-input'),
-    btnCreate: document.getElementById('btn-create'),
+    btnCreate: document.getElementById('btn-create-multi'),
     btnJoin: document.getElementById('btn-join'),
     btnLeave: document.getElementById('btn-leave'),
     btnCopyLink: document.getElementById('btn-copy-link'),
+    btnPlaySingle: document.getElementById('btn-play-single'),
     roomIdDisplay: document.getElementById('ui-room-id'),
     countDisplay: document.getElementById('ui-count'),
-    xpDisplay: document.getElementById('ui-xp')
+    xpDisplay: document.getElementById('ui-xp'),
+    hpDisplay: document.getElementById('ui-hp'),
+    modeDisplay: document.getElementById('ui-mode'),
+    customCursor: document.getElementById('custom-cursor')
 };
 
-// Получение контекста канваса (безопасно)
-let ctx = null;
-if (els.canvas) {
-    ctx = els.canvas.getContext('2d');
-}
+let ctx = els.canvas.getContext('2d');
 
 els.nicknameInput.value = myNickname;
-
 els.nicknameInput.addEventListener('change', (e) => {
     myNickname = e.target.value.trim() || 'Guest';
     myPlayer.name = myNickname;
     localStorage.setItem('mp_nickname', myNickname);
 });
 
-// --- АВТОМАТИЧЕСКОЕ ПОДКЛЮЧЕНИЕ ПО ССЫЛКЕ ---
+// --- АВТОМАТИЧЕСКОЕ ПОДКЛЮЧЕНИЕ ---
 window.addEventListener('load', () => {
     setTimeout(() => {
         if (!window.FB_DB) {
-            setStatus("⚠️ Ошибка: Firebase не загружен.");
-            return;
+            setStatus("⚠️ Firebase не загружен. Доступен только Offline режим.");
+            els.btnCreate.disabled = true;
+            els.btnJoin.disabled = true;
+        } else {
+            setStatus("✅ Онлайн активен.");
         }
         
         const urlParams = new URLSearchParams(window.location.search);
         const roomParam = urlParams.get('room');
         
-        if (roomParam) {
-            setStatus(`Подключение к ${roomParam}...`);
-            startGameSession(roomParam.toUpperCase());
+        if (roomParam && window.FB_DB) {
+            startMultiplayerSession(roomParam.toUpperCase());
         }
     }, 1000);
 });
@@ -211,7 +244,15 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => keys[e.code] = false);
 
-// --- ФУНКЦИИ КОПИРОВАНИЯ ССЫЛКИ ---
+window.addEventListener('mousemove', (e) => {
+    const rect = els.canvas.getBoundingClientRect();
+    mousePos.x = e.clientX - rect.left;
+    mousePos.y = e.clientY - rect.top;
+    els.customCursor.style.left = e.clientX + 'px';
+    els.customCursor.style.top = e.clientY + 'px';
+});
+
+// --- ФУНКЦИИ КОПИРОВАНИЯ ---
 function generateInviteUrl() {
     if (!currentRoomId) return "";
     const baseUrl = window.location.origin + window.location.pathname;
@@ -219,29 +260,31 @@ function generateInviteUrl() {
 }
 
 async function copyToClipboard(text) {
-    try {
-        await navigator.clipboard.writeText(text);
-        alert("Ссылка скопирована!");
-    } catch (err) {
-        alert("Ошибка копирования. Скопируйте вручную из адресной строки.");
-    }
+    try { await navigator.clipboard.writeText(text); alert("Ссылка скопирована!"); } catch (err) { alert("Ошибка копирования."); }
 }
-
-els.btnCopyLink.onclick = () => {
-    const link = generateInviteUrl();
-    if(link) copyToClipboard(link);
-    else alert("Вы не в комнате!");
+els.btnCopyLink.onclick = () => { 
+    const link = generateInviteUrl(); 
+    if(link) copyToClipboard(link); 
+    else alert("Вы не в комнате!"); 
 };
 
-// --- FIREBASE ЛОГИКА КОМНАТ ---
+// --- ЛОГИКА ЗАПУСКА ИГРЫ ---
 
-async function createRoom() {
+// 1. SINGLE PLAYER (ГАРАНТИРОВАННЫЙ СТАРТ)
+els.btnPlaySingle.onclick = () => {
+    isMultiplayer = false;
+    currentRoomId = null;
+    startGameCore();
+};
+
+// 2. MULTIPLAYER CREATE
+els.btnCreate.onclick = async () => {
     if (!window.FB_DB) return showError("Firebase не загружен");
     
-    myNickname = els.nicknameInput.value.trim() || 'Guest';
+    myNickname = els.nicknameInput.value.trim() || 'Host';
     myPlayer.name = myNickname;
     localStorage.setItem('mp_nickname', myNickname);
-
+    
     setStatus("Создание комнаты...");
     
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -250,23 +293,33 @@ async function createRoom() {
     
     try {
         await window.FB_FUNCS.setDoc(window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", roomId), {
-            createdAt: window.FB_FUNCS.serverTimestamp(),
-            hostId: myId,
-            status: "open"
+            createdAt: window.FB_FUNCS.serverTimestamp(), hostId: myId, status: "open"
         });
         
-        startGameSession(roomId);
+        isMultiplayer = true;
+        currentRoomId = roomId;
+        startGameCore();
+        
+        // Регистрация в фоне (не блокируем старт)
+        registerSelfInRoom().catch(err => {
+            console.warn("Reg failed, switching to Single Player logic locally:", err);
+            // Если регистрация упала, мы просто остаемся в мультиплеере визуально, но другие нас не увидят
+        });
+
     } catch (e) {
         console.error(e);
         if (e.code === 'permission-denied') {
-            showError("❌ ДОСТУП ЗАПРЕЩЕН! Измените Firestore Rules.");
+            showError("❌ ДОСТУП ЗАПРЕЩЕН! Переключаюсь в Offline режим.");
+            isMultiplayer = false;
+            startGameCore(); // Запускаем оффлайн, чтобы игра работала
         } else {
             showError("Ошибка создания: " + e.message);
         }
     }
-}
+};
 
-async function joinRoomManual() {
+// 3. JOIN ROOM
+els.btnJoin.onclick = () => {
     const val = els.joinInput.value.trim().toUpperCase();
     if (!val) return showError("Введите ID");
     if (!window.FB_DB) return showError("Firebase не загружен");
@@ -274,179 +327,183 @@ async function joinRoomManual() {
     myNickname = els.nicknameInput.value.trim() || 'Guest';
     myPlayer.name = myNickname;
     localStorage.setItem('mp_nickname', myNickname);
-
-    setStatus("Проверка комнаты...");
     
-    startGameSession(val);
-}
+    isMultiplayer = true;
+    currentRoomId = val;
+    startGameCore();
+    registerSelfInRoom().catch(console.warn);
+};
 
-function startGameSession(roomId) {
-    currentRoomId = roomId;
+// ОБЩИЙ ДВИЖОК ИГРЫ (Запускается всегда)
+function startGameCore() {
+    history.replaceState(null, "", currentRoomId ? `?room=${currentRoomId}` : window.location.pathname);
+    
+    // Сброс состояния
+    otherPlayers = {};
+    localOrbs = [];
+    monsters = [];
+    myPlayer.x = 100; myPlayer.y = 100; myPlayer.hp = 100; myPlayer.xp = 0;
+    
     inGame = true;
-    
-    history.replaceState(null, "", `?room=${roomId}`);
-
     els.menu.style.display = 'none';
     els.canvas.style.display = 'block';
     els.ui.style.display = 'block';
     els.hint.style.display = 'block';
-    els.roomIdDisplay.textContent = roomId;
+    els.customCursor.style.display = 'block';
     
-    otherPlayers = {};
-    localOrbs = [];
-    myPlayer.x = 100; 
-    myPlayer.y = 100; 
+    els.modeDisplay.textContent = isMultiplayer ? "MULTIPLAYER" : "SINGLE PLAYER";
+    els.roomIdDisplay.textContent = currentRoomId || "--";
+    els.countDisplay.textContent = "1";
     
-    registerSelfInRoom();
-    listenToPlayersInRoom();
-    listenToOrbsInRoom();
+    // Инициализация сетей ТОЛЬКО если это мультиплеер и есть база
+    if (isMultiplayer && window.FB_DB) {
+        listenToPlayersInRoom();
+        listenToOrbsInRoom();
+    }
     
+    spawnMonstersInitial();
+    
+    lastFrameTime = performance.now();
     requestAnimationFrame(gameLoop);
 }
 
 async function registerSelfInRoom() {
+    if (!window.FB_DB || !currentRoomId) return;
     const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "players", myId);
-    try {
-        await window.FB_FUNCS.setDoc(ref, {
-            x: myPlayer.x,
-            y: myPlayer.y,
-            color: myPlayer.color,
-            name: myPlayer.name,
-            timestamp: window.FB_FUNCS.serverTimestamp()
-        });
-        console.log("Registered self successfully");
-    } catch (e) {
-        console.error("Register error:", e);
-        leaveRoom(); 
-        if (e.code === 'permission-denied') {
-            showError("❌ НЕЛЬЗЯ ВОЙТИ: Права доступа заблокированы.");
-        } else {
-            showError("Ошибка входа: " + e.message);
-        }
-    }
+    await window.FB_FUNCS.setDoc(ref, {
+        x: myPlayer.x, y: myPlayer.y, color: myPlayer.color, name: myPlayer.name, timestamp: window.FB_FUNCS.serverTimestamp()
+    });
 }
 
 function listenToPlayersInRoom() {
     const colRef = window.FB_FUNCS.collection(window.FB_DB, "test_lobbies", currentRoomId, "players");
-    
     unsubscribeRoom = window.FB_FUNCS.onSnapshot(colRef, (snapshot) => {
         const currentOtherPlayers = {};
-        
         snapshot.forEach(docChange => {
             const data = docChange.data();
             const playerId = docChange.id;
-
             if (playerId === myId) return;
-
             currentOtherPlayers[playerId] = {
-                x: data.x, 
-                y: data.y,
-                targetX: data.x, 
-                targetY: data.y,
-                color: data.color || '#ffffff',
-                name: data.name || "Unknown"
+                x: data.x, y: data.y, targetX: data.x, targetY: data.y,
+                color: data.color || '#ffffff', name: data.name || "Unknown"
             };
-            
             if (otherPlayers[playerId]) {
                  currentOtherPlayers[playerId].x = otherPlayers[playerId].x;
                  currentOtherPlayers[playerId].y = otherPlayers[playerId].y;
             }
         });
-
         otherPlayers = currentOtherPlayers;
-        
-        const totalOnline = Object.keys(otherPlayers).length + 1;
-        els.countDisplay.textContent = totalOnline;
-
+        els.countDisplay.textContent = Object.keys(otherPlayers).length + 1;
     }, (err) => {
-        console.error(err);
-        if (err.code === 'permission-denied') {
-            leaveRoom();
-            showError("❌ ЧТЕНИЕ ЗАБЛОКИРОВАНО: Исправьте Firestore Rules.");
-        } else {
-            leaveRoom();
-        }
+        console.error("Net Err:", err);
+        // При ошибке сети переключаемся в визуальный single player, но не выходим из игры резко
+        isMultiplayer = false; 
+        els.modeDisplay.textContent = "SINGLE (NET ERR)";
     });
 }
 
 function listenToOrbsInRoom() {
     const colRef = window.FB_FUNCS.collection(window.FB_DB, "test_lobbies", currentRoomId, "orbs");
-    
     unsubscribeOrbs = window.FB_FUNCS.onSnapshot(colRef, (snap) => {
         localOrbs = [];
         snap.forEach(doc => {
             const d = doc.data();
             localOrbs.push({ id: doc.id, x: d.x, y: d.y });
         });
-    }, (err) => {
-        console.warn("Orbs listener error:", err);
-    });
+    }, (err) => console.warn("Orbs Err:", err));
 
     if(orbSpawnInterval) clearInterval(orbSpawnInterval);
     orbSpawnInterval = setInterval(async () => {
-        if (!inGame || !window.FB_DB) return;
-        if (localOrbs.length < 5) {
-            const rx = 50 + Math.random() * (CANVAS_W - 100);
-            const ry = 50 + Math.random() * (CANVAS_H - 100);
-            
+        if (!inGame || !window.FB_DB || !isMultiplayer) return;
+        if (localOrbs.length < 10) {
+            const rx = 50 + Math.random() * (MAP_COLS * TILE_SIZE - 100);
+            const ry = 50 + Math.random() * (MAP_ROWS * TILE_SIZE - 100);
             const tileX = Math.floor(rx / TILE_SIZE);
             const tileY = Math.floor(ry / TILE_SIZE);
-            
             if (MAP[tileY] && MAP[tileY][tileX] === 0) {
-                try {
-                    await window.FB_FUNCS.addDoc(colRef, { x: rx, y: ry });
-                } catch(e) {}
+                try { await window.FB_FUNCS.addDoc(colRef, { x: rx, y: ry }); } catch(e) {}
             }
         }
-    }, 2000);
+    }, 3000);
+}
+
+function spawnMonstersInitial() {
+    for(let i=0; i<5; i++) spawnMonster();
+    if(monsterSpawnInterval) clearInterval(monsterSpawnInterval);
+    monsterSpawnInterval = setInterval(spawnMonster, 5000);
+}
+
+function spawnMonster() {
+    if(!inGame) return;
+    let attempts = 0;
+    while(attempts < 10) {
+        const rx = 50 + Math.random() * (MAP_COLS * TILE_SIZE - 100);
+        const ry = 50 + Math.random() * (MAP_ROWS * TILE_SIZE - 100);
+        const tileX = Math.floor(rx / TILE_SIZE);
+        const tileY = Math.floor(ry / TILE_SIZE);
+        const distToPlayer = Math.hypot(myPlayer.x - rx, myPlayer.y - ry);
+        if(distToPlayer > 300 && MAP[tileY] && MAP[tileY][tileX] === 0) {
+            monsters.push({ x: rx, y: ry, speed: 40 });
+            return;
+        }
+        attempts++;
+    }
 }
 
 async function syncPosition() {
-    if (!inGame || !window.FB_DB) return;
+    if (!inGame || !isMultiplayer || !window.FB_DB) return;
     const now = Date.now();
     if (now - lastSyncTime < SYNC_INTERVAL_MS) return;
     lastSyncTime = now;
-
     const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "players", myId);
     await window.FB_FUNCS.updateDoc(ref, {
-        x: myPlayer.x,
-        y: myPlayer.y,
-        name: myPlayer.name,
-        timestamp: window.FB_FUNCS.serverTimestamp()
-    }).catch(e => {
-        if(e.code !== 'not-found') console.warn("Sync fail", e);
-    });
+        x: myPlayer.x, y: myPlayer.y, name: myPlayer.name, timestamp: window.FB_FUNCS.serverTimestamp()
+    }).catch(e => { /* ignore */ });
 }
 
 async function collectOrb(id) {
     if (!inGame) return;
-    const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "orbs", id);
-    await window.FB_FUNCS.deleteDoc(ref).catch(e => {});
-    
+    if (isMultiplayer && window.FB_DB) {
+        const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "orbs", id);
+        await window.FB_FUNCS.deleteDoc(ref).catch(e => {});
+    }
     myPlayer.xp += 10;
     updateUI();
 }
 
+function takeDamage(amount) {
+    myPlayer.hp -= amount;
+    if(myPlayer.hp <= 0) {
+        myPlayer.hp = 0;
+        gameOver();
+    }
+    updateUI();
+}
+
+function gameOver() {
+    inGame = false;
+    alert("GAME OVER! HP: 0");
+    leaveRoom();
+}
+
 function leaveRoom() {
     inGame = false;
-    const oldRoomId = currentRoomId;
-    currentRoomId = null;
-    
     if (unsubscribeRoom) unsubscribeRoom();
     if (unsubscribeOrbs) unsubscribeOrbs();
     if (orbSpawnInterval) clearInterval(orbSpawnInterval);
+    if (monsterSpawnInterval) clearInterval(monsterSpawnInterval);
     
-    if (window.FB_DB && oldRoomId) {
-        const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", oldRoomId, "players", myId);
+    if (isMultiplayer && window.FB_DB && currentRoomId) {
+        const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "players", myId);
         window.FB_FUNCS.deleteDoc(ref).catch(()=>{});
     }
 
     history.replaceState(null, "", window.location.pathname);
-
     els.menu.style.display = 'block';
     els.canvas.style.display = 'none';
     els.ui.style.display = 'none';
     els.hint.style.display = 'none';
+    els.customCursor.style.display = 'none';
     setStatus("");
 }
 
@@ -455,17 +512,16 @@ function leaveRoom() {
 function isWall(x, y) {
     const tx = Math.floor(x / TILE_SIZE);
     const ty = Math.floor(y / TILE_SIZE);
-    if (tx < 0 || tx >= MAP[0].length || ty < 0 || ty >= MAP.length) return true;
+    if (tx < 0 || tx >= MAP_COLS || ty < 0 || ty >= MAP_ROWS) return true;
     return MAP[ty][tx] === 1;
 }
 
-function checkCollision(px, py) {
-    const r = PLAYER_RADIUS;
+function checkCollision(px, py, radius) {
     const corners = [
-        {x: px - r, y: py - r},
-        {x: px + r, y: py - r},
-        {x: px - r, y: py + r},
-        {x: px + r, y: py + r}
+        {x: px - radius, y: py - radius},
+        {x: px + radius, y: py - radius},
+        {x: px - radius, y: py + radius},
+        {x: px + radius, y: py + radius}
     ];
     for (let c of corners) {
         if (isWall(c.x, c.y)) return true;
@@ -473,74 +529,162 @@ function checkCollision(px, py) {
     return false;
 }
 
-function updatePhysics() {
+function updatePhysics(dt) {
     if (!inGame) return;
 
     let dx = 0, dy = 0;
-    if (keys['KeyW'] || keys['ArrowUp']) dy -= SPEED;
-    if (keys['KeyS'] || keys['ArrowDown']) dy += SPEED;
-    if (keys['KeyA'] || keys['ArrowLeft']) dx -= SPEED;
-    if (keys['KeyD'] || keys['ArrowRight']) dx += SPEED;
+    if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+    if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+    if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+    if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
 
-    if (dx !== 0 && dy !== 0) {
-        const factor = 1 / Math.sqrt(2);
-        dx *= factor;
-        dy *= factor;
+    if (dx !== 0 || dy !== 0) {
+        const length = Math.sqrt(dx*dx + dy*dy);
+        dx /= length;
+        dy /= length;
+        
+        const moveSpeed = BASE_SPEED * dt; 
+        
+        let nextX = myPlayer.x + dx * moveSpeed;
+        if (!checkCollision(nextX, myPlayer.y, PLAYER_RADIUS)) myPlayer.x = nextX;
+
+        let nextY = myPlayer.y + dy * moveSpeed;
+        if (!checkCollision(myPlayer.x, nextY, PLAYER_RADIUS)) myPlayer.y = nextY;
     }
 
-    let nextX = myPlayer.x + dx;
-    if (!checkCollision(nextX, myPlayer.y)) myPlayer.x = nextX;
-
-    let nextY = myPlayer.y + dy;
-    if (!checkCollision(myPlayer.x, nextY)) myPlayer.y = nextY;
-
-    for (let i = localOrbs.length - 1; i >= 0; i--) {
-        const orb = localOrbs[i];
-        const dist = Math.hypot(myPlayer.x - orb.x, myPlayer.y - orb.y);
-        if (dist < PLAYER_RADIUS + 15) {
-            collectOrb(orb.id);
-        }
-    }
-}
-
-function interpolateOthers() {
+    // Интерполяция других игроков
     for (let pid in otherPlayers) {
         const p = otherPlayers[pid];
         p.x += (p.targetX - p.x) * INTERPOLATION_FACTOR;
         p.y += (p.targetY - p.y) * INTERPOLATION_FACTOR;
     }
+
+    // Сбор орбов
+    for (let i = localOrbs.length - 1; i >= 0; i--) {
+        const orb = localOrbs[i];
+        const dist = Math.hypot(myPlayer.x - orb.x, myPlayer.y - orb.y);
+        if (dist < PLAYER_RADIUS + 10) {
+            collectOrb(orb.id);
+        }
+    }
+
+    // Монстры
+    for (let i = monsters.length - 1; i >= 0; i--) {
+        const m = monsters[i];
+        const distToPlayer = Math.hypot(m.x - myPlayer.x, m.y - myPlayer.y);
+        
+        if (distToPlayer < 500) {
+            const angle = Math.atan2(myPlayer.y - m.y, myPlayer.x - m.x);
+            const moveSpeed = m.speed * dt;
+            let nextMx = m.x + Math.cos(angle) * moveSpeed;
+            let nextMy = m.y + Math.sin(angle) * moveSpeed;
+            
+            if (!checkCollision(nextMx, nextMy, MONSTER_RADIUS)) {
+                m.x = nextMx;
+                m.y = nextMy;
+            } else {
+                if (!checkCollision(nextMx, m.y, MONSTER_RADIUS)) m.x = nextMx;
+                else if (!checkCollision(m.x, nextMy, MONSTER_RADIUS)) m.y = nextMy;
+            }
+        }
+
+        if (distToPlayer < PLAYER_RADIUS + MONSTER_RADIUS) {
+            takeDamage(10);
+            m.x -= Math.cos(Math.atan2(myPlayer.y - m.y, myPlayer.x - m.x)) * 20;
+            m.y -= Math.sin(Math.atan2(myPlayer.y - m.y, myPlayer.x - m.x)) * 20;
+        }
+    }
 }
 
-function drawMap() {
-    if (!ctx) return;
+function drawLighting(ctx) {
+    ctx.save();
+    const gradient = ctx.createRadialGradient(CANVAS_W/2, CANVAS_H/2, 0, CANVAS_W/2, CANVAS_H/2, LIGHT_DISTANCE);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.3)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.95)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.restore();
+}
+
+function drawWorld(ctx, cameraX, cameraY) {
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
-    for(let y=0; y<MAP.length; y++) {
-        for(let x=0; x<MAP[y].length; x++) {
-            if(MAP[y][x] === 1) {
-                ctx.fillStyle = '#444';
-                ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                ctx.fillStyle = '#555';
-                ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, 5);
+    
+    const startCol = Math.floor(cameraX / TILE_SIZE);
+    const endCol = startCol + (CANVAS_W / TILE_SIZE) + 1;
+    const startRow = Math.floor(cameraY / TILE_SIZE);
+    const endRow = startRow + (CANVAS_H / TILE_SIZE) + 1;
+    
+    for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
+            if (r >= 0 && r < MAP_ROWS && c >= 0 && c < MAP_COLS) {
+                const x = c * TILE_SIZE - cameraX;
+                const y = r * TILE_SIZE - cameraY;
+                
+                if (MAP[r][c] === 1) {
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                    ctx.strokeStyle = '#222';
+                    ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+                } else {
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                }
             }
         }
     }
 }
 
-function drawPlayer(x, y, color, label, isMe = false) {
-    if (!ctx) return;
-    ctx.beginPath();
-    ctx.arc(x, y + 5, PLAYER_RADIUS * 0.8, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fill();
+function drawEntities(ctx, cameraX, cameraY) {
+    ctx.shadowColor = '#aa00ff';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = '#aa00ff';
+    for (let orb of localOrbs) {
+        const sx = orb.x - cameraX;
+        const sy = orb.y - cameraY;
+        if(sx > -20 && sx < CANVAS_W+20 && sy > -20 && sy < CANVAS_H+20) {
+            ctx.beginPath();
+            ctx.arc(sx, sy, 5, 0, Math.PI*2);
+            ctx.fill();
+        }
+    }
+    ctx.shadowBlur = 0;
 
+    ctx.fillStyle = '#500';
+    for (let m of monsters) {
+        const sx = m.x - cameraX;
+        const sy = m.y - cameraY;
+        if(sx > -30 && sx < CANVAS_W+30 && sy > -30 && sy < CANVAS_H+30) {
+            ctx.beginPath();
+            ctx.arc(sx, sy, MONSTER_RADIUS, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#f00';
+            ctx.beginPath();
+            ctx.arc(sx - 5, sy - 2, 2, 0, Math.PI*2);
+            ctx.arc(sx + 5, sy - 2, 2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#500';
+        }
+    }
+
+    for (let pid in otherPlayers) {
+        const p = otherPlayers[pid];
+        const sx = p.x - cameraX;
+        const sy = p.y - cameraY;
+        if(sx > -20 && sx < CANVAS_W+20 && sy > -20 && sy < CANVAS_H+20) {
+            drawPlayerSprite(ctx, sx, sy, p.color, p.name);
+        }
+    }
+
+    drawPlayerSprite(ctx, CANVAS_W/2, CANVAS_H/2, myPlayer.color, myPlayer.name, true);
+}
+
+function drawPlayerSprite(ctx, x, y, color, label, isMe = false) {
     ctx.beginPath();
     ctx.arc(x, y, PLAYER_RADIUS, 0, Math.PI*2);
     ctx.fillStyle = color;
     ctx.fill();
-    
     ctx.lineWidth = 2;
     ctx.strokeStyle = isMe ? '#fff' : '#000';
     ctx.stroke();
@@ -555,15 +699,8 @@ function drawPlayer(x, y, color, label, isMe = false) {
         ctx.shadowBlur = 0;
     }
 
-    ctx.font = 'bold 12px Arial';
+    ctx.font = 'bold 10px Courier New';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    const textWidth = ctx.measureText(label).width;
-    
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(x - textWidth/2 - 4, y - 28, textWidth + 8, 16);
-    
     ctx.fillStyle = '#fff';
     ctx.fillText(label, x, y - 20);
 }
@@ -571,52 +708,35 @@ function drawPlayer(x, y, color, label, isMe = false) {
 function render() {
     if (!inGame || !ctx) return;
     
-    drawMap();
-
-    ctx.shadowColor = '#aa00ff';
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = '#aa00ff';
-    for (let orb of localOrbs) {
-        ctx.beginPath();
-        ctx.arc(orb.x, orb.y, 6, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(orb.x, orb.y, 2, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = '#aa00ff';
-    }
-    ctx.shadowBlur = 0;
-
-    for (let pid in otherPlayers) {
-        const p = otherPlayers[pid];
-        drawPlayer(p.x, p.y, p.color, p.name);
-    }
-
-    drawPlayer(myPlayer.x, myPlayer.y, myPlayer.color, myPlayer.name, true);
+    const cameraX = myPlayer.x - CANVAS_W / 2;
+    const cameraY = myPlayer.y - CANVAS_H / 2;
+    
+    drawWorld(ctx, cameraX, cameraY);
+    drawEntities(ctx, cameraX, cameraY);
+    drawLighting(ctx);
 }
 
 function updateUI() {
     els.xpDisplay.textContent = myPlayer.xp;
+    els.hpDisplay.textContent = myPlayer.hp;
+    els.hpDisplay.style.color = myPlayer.hp < 30 ? '#f00' : '#fff';
 }
 
-function getRandomColor() {
-    const colors = ['#00ffff', '#ff00ff', '#00ff00', '#ffaaaa', '#aaaaff', '#ffffaa'];
-    return colors[Math.floor(Math.random() * colors.length)];
-}
-
-function gameLoop() {
+function gameLoop(currentTime) {
     if (!inGame) return;
-    updatePhysics();
-    interpolateOthers();
+    
+    const deltaTime = (currentTime - lastFrameTime) / 1000;
+    lastFrameTime = currentTime;
+    const safeDt = Math.min(deltaTime, 0.1); 
+    
+    updatePhysics(safeDt);
     syncPosition();
     render();
+    
     requestAnimationFrame(gameLoop);
 }
 
 // --- ОБРАБОТЧИКИ КНОПОК ---
-els.btnCreate.onclick = createRoom;
-els.btnJoin.onclick = joinRoomManual;
 els.btnLeave.onclick = leaveRoom;
 
 function setStatus(msg) { els.status.textContent = msg; }
@@ -627,7 +747,7 @@ function showError(msg) {
 }
 
 window.addEventListener('beforeunload', () => {
-    if (inGame && window.FB_DB && currentRoomId) {
+    if (inGame && isMultiplayer && window.FB_DB && currentRoomId) {
         const ref = window.FB_FUNCS.doc(window.FB_DB, "test_lobbies", currentRoomId, "players", myId);
         window.FB_FUNCS.deleteDoc(ref);
     }
