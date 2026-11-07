@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Precision Click Game: Fixed Navigation</title>
+    <title>Precision Click Game: Scoring Update</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -37,16 +37,13 @@
     </script>
 
     <style>
-        /* ... СТИЛИ БЕЗ ИЗМЕНЕНИЙ (КОПИЯ ИЗ ПРЕДЫДУЩЕГО ОТВЕТА) ... */
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; cursor: none !important; user-select: none; -webkit-user-select: none; }
         html, body { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; color: #FFF; }
         #virtual-screen { position: absolute; width: 1920px; height: 1080px; background-color: #050505; transform-origin: center center; overflow: hidden; }
         #cursor { position: absolute; top: 0; left: 0; background-color: #FFF; pointer-events: none; z-index: 9999; border-radius: 50%; mix-blend-mode: difference; will-change: transform; }
         #game-area { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; z-index: 10; }
         
-        #profile-widget { position: absolute; top: 20px; left: 20px; display: flex; align-items: center; gap: 15px; z-index: 150; pointer-events: auto; background: rgba(20,20,20,0.8); padding: 10px 15px; border-radius: 8px; border: 1px solid #333; backdrop-filter: blur(5px); transition: opacity 0.3s, visibility 0.3s; }
-        #profile-widget.hidden-by-game { opacity: 0; visibility: hidden; pointer-events: none; }
-        
+        #profile-widget { position: absolute; top: 20px; left: 20px; display: flex; align-items: center; gap: 15px; z-index: 150; pointer-events: auto; background: rgba(20,20,20,0.8); padding: 10px 15px; border-radius: 8px; border: 1px solid #333; backdrop-filter: blur(5px); }
         .avatar-container { position: relative; width: 50px; height: 50px; border-radius: 50%; overflow: hidden; border: 2px solid #555; cursor: pointer !important; transition: border-color 0.2s; }
         .avatar-container:hover { border-color: #FFF; }
         #user-avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -60,29 +57,121 @@
         .stats-row { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #888; margin-top: 2px; }
         #level-display-profile { color: #FFD700; font-weight: bold; }
 
-        #hud { position: absolute; top: 0; left: 0; width: 1920px; z-index: 100; pointer-events: none; opacity: 0; transition: opacity 0.3s; padding-top: 30px; }
-        
-        /* Профиль игрока в игре */
-        #in-game-profile { 
-            position: absolute; 
-            top: 20px; 
-            left: 20px; 
-            display: flex; 
-            align-items: center; 
-            gap: 10px; 
-            background: rgba(0,0,0,0.6); 
-            padding: 5px 10px; 
-            border-radius: 20px; 
-            border: 1px solid #444; 
+        /* --- LEADERBOARD HUD (TOP-RIGHT) - REDUCED BY 40% --- */
+        #online-leaderboard-hud {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 132px;
+            background: rgba(10, 10, 10, 0.75);
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 5px;
+            z-index: 150;
             pointer-events: none;
-            z-index: 102;
+            backdrop-filter: blur(4px);
+            display: none;
         }
-        #ig-avatar { width: 30px; height: 30px; border-radius: 50%; border: 1px solid #fff; object-fit: cover; }
-        #ig-nick { font-size: 14px; color: #fff; font-weight: bold; }
-        
-        #timer-display { position: absolute; top: 25px; left: 50%; transform: translateX(-50%); font-size: 36px; font-weight: bold; color: #FFF; text-shadow: 0 0 10px rgba(255,255,255,0.3); z-index: 103; }
-        #status-msg { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); font-size: 20px; color: #FFD700; min-height: 24px; text-align: center; width: 600px; z-index: 103; }
-        #mode-indicator { position: absolute; top: 25px; right: 40px; font-size: 20px; letter-spacing: 2px; padding: 5px 15px; border-radius: 4px; border: 2px solid #333; z-index: 103; }
+
+        .lb-title {
+            font-size: 7px;
+            color: #555;
+            text-align: center;
+            margin-bottom: 4px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            border-bottom: 1px solid #222;
+            padding-bottom: 3px;
+        }
+
+        .lb-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .lb-entry {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 3px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 2px;
+            transition: all 0.3s;
+            border: 1px solid transparent;
+        }
+
+        .lb-entry.is-self {
+            border-color: #0F0;
+            background: rgba(0,255,0,0.1);
+            box-shadow: 0 0 5px rgba(0,255,0,0.1);
+        }
+
+        .lb-entry.is-leader {
+            border-color: #FFD700;
+            background: rgba(255,215,0,0.1);
+        }
+
+        .lb-rank {
+            font-size: 8px;
+            font-weight: bold;
+            color: #555;
+            width: 12px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .lb-entry.is-leader .lb-rank { color: #FFD700; }
+        .lb-entry.is-self .lb-rank { color: #0F0; }
+
+        .lb-avatar {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #222;
+            border: 1px solid #444;
+            flex-shrink: 0;
+        }
+
+        .lb-info {
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        .lb-name {
+            font-size: 8px;
+            color: #DDD;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .lb-entry.is-self .lb-name { color: #0F0; font-weight: bold; }
+        .lb-entry.is-leader .lb-name { color: #FFD700; }
+
+        .lb-level {
+            font-size: 6px;
+            color: #666;
+        }
+
+        .lb-score {
+            font-size: 9px;
+            font-weight: bold;
+            color: #FFF;
+            flex-shrink: 0;
+            min-width: 20px;
+            text-align: right;
+        }
+
+        .lb-entry.is-leader .lb-score { color: #FFD700; }
+        .lb-entry.is-self .lb-score { color: #0F0; }
+
+        /* --- STANDARD HUD --- */
+        #hud { position: absolute; top: 0; left: 0; width: 1920px; z-index: 100; pointer-events: none; opacity: 0; transition: opacity 0.3s; padding-top: 30px; }
+        #timer-display { position: absolute; top: 25px; left: 50%; transform: translateX(-50%); font-size: 42px; font-weight: bold; color: #FFF; text-shadow: 0 0 10px rgba(255,255,255,0.3); z-index: 121; }
+        #status-msg { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); font-size: 20px; color: #FFD700; min-height: 24px; text-align: center; width: 600px; }
+        #mode-indicator { position: absolute; top: 25px; left: 50%; transform: translateX(-50%); margin-top: 50px; font-size: 16px; letter-spacing: 2px; padding: 4px 12px; border-radius: 4px; border: 1px solid #333; opacity: 0.8; }
         .mode-normal { color: #0F0; border-color: #0F0; background: rgba(0,255,0,0.1); }
         .mode-medium { color: #0AF; border-color: #0AF; background: rgba(0,170,255,0.1); }
         .mode-hard { color: #F00; border-color: #F00; background: rgba(255,0,0,0.1); }
@@ -147,12 +236,6 @@
         input:checked + .slider-toggle { background-color: #222; }
         input:checked + .slider-toggle:before { transform: translateX(34px); background-color: #0F0; box-shadow: 0 0 15px rgba(0,255,0,0.5); }
         
-        .checkbox-row.disabled { opacity: 0.3; pointer-events: none; cursor: default; display: flex; align-items: center; gap: 15px; margin-top: 15px; }
-        .custom-checkbox { width: 24px; height: 24px; min-width: 24px; border: 2px solid #555; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
-        .custom-checkbox.checked { background: #888; border-color: #888; }
-        .custom-checkbox.checked::after { content: '✓'; color: #000; font-size: 16px; font-weight: bold; line-height: 1; }
-        .checkbox-label { font-size: 16px; color: #666; letter-spacing: 1px; line-height: 24px; }
-
         .preview-box { width: 60px; height: 60px; border: 2px solid #333; display: flex; justify-content: center; align-items: center; background: #000; border-radius: 6px; }
         .preview-dot { background-color: #FFF; border-radius: 50%; box-shadow: 0 0 8px #FFF; }
         .volume-val { min-width: 80px; text-align: right; font-size: 20px; color: #888; font-variant-numeric: tabular-nums; }
@@ -208,179 +291,114 @@
         .buy-btn:hover { background: #0c0; }
         .empty-text { text-align: center; color: #666; font-style: italic; margin-top: 20px; grid-column: 1 / -1; }
 
-        /* ===== НОВЫЕ СТИЛИ ДЛЯ ПРОФИЛЕЙ И ЛИДЕРБОРДА ===== */
-        .game-profile-card {
-            position: absolute;
+        /* --- FRIENDS SYSTEM (MODAL WINDOW STYLE) --- */
+        .friends-input-row {
             display: flex;
-            align-items: center;
             gap: 10px;
-            background: rgba(0, 0, 0, 0.68);
-            border: 1px solid #444;
-            border-radius: 22px;
-            padding: 7px 14px;
-            pointer-events: none;
-            backdrop-filter: blur(4px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-            z-index: 102;
-            min-width: 170px;
+            margin-bottom: 20px;
         }
-
-        .game-profile-card img,
-        .pc-avatar-ph {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            border: 1px solid rgba(255,255,255,0.75);
-            object-fit: cover;
-            background: #222;
-            flex: 0 0 36px;
+        .friends-input-row input {
+            flex-grow: 1;
+            padding: 12px 15px;
+            background: #111;
+            border: 2px solid #333;
+            border-radius: 6px;
+            color: #FFF;
+            font-family: inherit;
+            font-size: 16px;
+            outline: none;
+            pointer-events: auto;
         }
-
-        .pc-avatar-ph {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            color: #888;
+        .friends-input-row input:focus { border-color: #666; }
+        .add-friend-btn {
+            background: #0AF;
+            color: #000;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            pointer-events: auto;
+            white-space: nowrap;
         }
+        .add-friend-btn:hover { background: #0CF; }
 
-        .pc-text {
+        .friends-list {
             display: flex;
             flex-direction: column;
-            gap: 3px;
-            min-width: 120px;
-        }
-
-        .pc-name {
-            font-size: 15px;
-            font-weight: bold;
-            color: #fff;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 145px;
-        }
-
-        .pc-meta {
-            display: flex;
-            align-items: center;
             gap: 8px;
-            font-size: 11px;
-            color: #bbb;
+            max-height: 400px;
+            overflow-y: auto;
         }
 
-        .pc-xpbar {
-            width: 82px;
-            height: 5px;
-            background: #222;
-            border-radius: 3px;
-            overflow: hidden;
-        }
-
-        .pc-xpfill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, #0F0, #0A0);
-            transition: width 0.2s ease-out;
-        }
-
-        #online-player-corners {
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            z-index: 101;
-        }
-
-        .remote-profile {
-            z-index: 101;
-        }
-
-        .remote-profile.top-right {
-            top: 86px;
-            right: 20px;
-        }
-
-        .remote-profile.bottom-left {
-            bottom: 20px;
-            left: 20px;
-        }
-
-        .remote-profile.bottom-right {
-            bottom: 86px;
-            right: 20px;
-        }
-
-        #mini-leaderboard {
-            position: absolute;
-            top: 108px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            justify-content: center;
-            max-width: 1300px;
-            pointer-events: none;
-            z-index: 103;
-            flex-wrap: nowrap;
-            overflow: hidden;
-        }
-
-        .mini-lb-item {
+        .friend-item {
             display: flex;
             align-items: center;
-            gap: 6px;
-            background: rgba(0,0,0,0.58);
+            gap: 12px;
+            padding: 12px 15px;
+            background: rgba(255,255,255,0.03);
             border: 1px solid #333;
-            border-radius: 14px;
-            padding: 4px 10px;
-            font-size: 12px;
-            color: #ccc;
-            white-space: nowrap;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+            border-radius: 6px;
+            transition: all 0.2s;
         }
+        .friend-item:hover { border-color: #555; background: rgba(255,255,255,0.05); }
 
-        .mini-lb-me {
-            border-color: #0F0;
-            background: rgba(0,255,0,0.08);
-        }
-
-        .mini-lb-rank {
-            color: #FFD700;
-            font-weight: bold;
-            min-width: 14px;
-            text-align: center;
-        }
-
-        .mini-lb-avatar {
-            width: 20px;
-            height: 20px;
+        .friend-avatar {
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             object-fit: cover;
-            border: 1px solid #555;
             background: #222;
-            flex: 0 0 20px;
+            border: 2px solid #444;
         }
 
-        .mini-lb-avatar-ph {
+        .friend-info {
+            flex-grow: 1;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            color: #777;
+            flex-direction: column;
+            gap: 2px;
         }
-
-        .mini-lb-name {
-            max-width: 110px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .mini-lb-score {
-            color: #0F0;
+        .friend-name {
+            font-size: 16px;
             font-weight: bold;
-            font-variant-numeric: tabular-nums;
+            color: #FFF;
         }
+        .friend-status {
+            font-size: 12px;
+            color: #666;
+        }
+        .friend-status.online { color: #0F0; }
+
+        .remove-friend-btn {
+            background: transparent;
+            border: 1px solid #F00;
+            color: #F00;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.2s;
+        }
+        .remove-friend-btn:hover { background: #F00; color: #000; }
+
+        .invite-friend-btn {
+            background: transparent;
+            border: 1px solid #0AF;
+            color: #0AF;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.2s;
+            margin-right: 8px;
+        }
+        .invite-friend-btn:hover { background: #0AF; color: #000; }
     </style>
 </head>
 <body>
@@ -413,31 +431,15 @@
         </div>
 
         <div id="hud">
-            <!-- Ваш профиль всегда слева сверху -->
-            <div id="in-game-profile" class="game-profile-card">
-                <div id="ig-avatar-ph" class="pc-avatar-ph">👤</div>
-                <img id="ig-avatar" src="" alt="" style="display:none;">
-                <div class="pc-text">
-                    <span id="ig-nick">Player</span>
-                    <div class="pc-meta">
-                        <span id="ig-level">LVL 1</span>
-                        <div class="pc-xpbar">
-                            <div id="ig-xp-fill" class="pc-xpfill"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <div id="timer-display">25.00s</div>
             <div id="status-msg"></div>
-
-            <!-- Мини лидерборд под таймером -->
-            <div id="mini-leaderboard"></div>
-            
-            <!-- Контейнер для профилей других игроков -->
-            <div id="online-player-corners"></div>
-
             <div id="mode-indicator" class="mode-normal">NORMAL</div>
+        </div>
+
+        <!-- LEADERBOARD HUD (TOP-RIGHT) - COMPACT -->
+        <div id="online-leaderboard-hud">
+            <div class="lb-title">LEADERBOARD</div>
+            <div class="lb-list" id="lb-list"></div>
         </div>
         
         <div id="game-area"></div>
@@ -451,6 +453,7 @@
         <div id="bottom-menu">
             <button class="menu-btn" id="btn-play">ИГРАТЬ</button>
             <button class="menu-btn" id="btn-settings">НАСТРОЙКИ</button>
+            <button class="menu-btn" id="btn-friends">ДРУЗЬЯ</button>
             <button class="menu-btn" id="btn-inventory">ИНВЕНТАРЬ</button>
             <button class="menu-btn" id="btn-shop">МАГАЗИН</button>
             <button class="menu-btn" id="btn-exit">ВЫХОД</button>
@@ -524,7 +527,7 @@
             <button class="menu-btn close-modal-btn" id="btn-close-levels">НАЗАД</button>
         </div>
 
-        <!-- МОДАЛКА ДЕЙСТВИЙ ОНЛАЙН (СОЗДАТЬ/НАЙТИ) -->
+        <!-- МОДАЛКА ДЕЙСТВИЙ ОНЛАЙН -->
         <div id="online-action-modal" class="modal">
             <h2>ОНЛАЙН РЕЖИМ</h2>
             <p style="text-align:center; color:#888; margin-bottom:30px;">Уровень: <span id="action-level-info" style="color:#DA70D6;">1</span> | Сложность: <span id="action-diff-info" style="color:#DA70D6;">Normal</span></p>
@@ -602,6 +605,19 @@
             </div>
         </div>
 
+        <!-- МОДАЛКА ДРУЗЕЙ -->
+        <div id="friends-modal" class="modal">
+            <h2>СПИСОК ДРУЗЕЙ</h2>
+            <div class="friends-input-row">
+                <input type="text" id="add-friend-input" placeholder="Введите никнейм друга..." maxlength="15">
+                <button class="add-friend-btn" id="btn-add-friend">ДОБАВИТЬ</button>
+            </div>
+            <div class="friends-list" id="friends-list-container">
+                <div class="empty-text">Список друзей пуст</div>
+            </div>
+            <button class="menu-btn close-modal-btn" id="btn-close-friends">ЗАКРЫТЬ</button>
+        </div>
+
         <div id="inventory-modal" class="modal">
             <h2>ИНВЕНТАРЬ</h2>
             <div class="item-grid" id="inventory-grid"><div class="empty-text">Инвентарь пуст</div></div>
@@ -662,7 +678,6 @@ const els = {
     tabNormal: document.getElementById('tab-normal'), tabMedium: document.getElementById('tab-medium'), tabHard: document.getElementById('tab-hard'),
     btnInventory: document.getElementById('btn-inventory'), btnShop: document.getElementById('btn-shop'), inventoryModal: document.getElementById('inventory-modal'), shopModal: document.getElementById('shop-modal'), btnCloseInventory: document.getElementById('btn-close-inventory'), btnCloseShop: document.getElementById('btn-close-shop'), inventoryGrid: document.getElementById('inventory-grid'), shopGrid: document.getElementById('shop-grid'),
     
-    // Новые элементы навигации
     modeChoiceModal: document.getElementById('mode-choice-modal'),
     tabOffline: document.getElementById('tab-offline'),
     tabOnline: document.getElementById('tab-online'),
@@ -702,15 +717,15 @@ const els = {
     onlineLeaderboard: document.querySelector('#online-leaderboard tbody'),
     btnBackToMainFromRes: document.getElementById('btn-back-to-main-from-res'),
     
-    // Профили в игре
-    igAvatar: document.getElementById('ig-avatar'),
-    igAvatarPh: document.getElementById('ig-avatar-ph'),
-    igNick: document.getElementById('ig-nick'),
-    igLevel: document.getElementById('ig-level'),
-    igXpFill: document.getElementById('ig-xp-fill'),
-    miniLeaderboard: document.getElementById('mini-leaderboard'),
-    onlinePlayerCorners: document.getElementById('online-player-corners'),
-    profileWidget: document.getElementById('profile-widget')
+    onlineLeaderboardHud: document.getElementById('online-leaderboard-hud'),
+    lbList: document.getElementById('lb-list'),
+
+    btnFriends: document.getElementById('btn-friends'),
+    friendsModal: document.getElementById('friends-modal'),
+    btnCloseFriends: document.getElementById('btn-close-friends'),
+    addFriendInput: document.getElementById('add-friend-input'),
+    btnAddFriend: document.getElementById('btn-add-friend'),
+    friendsListContainer: document.getElementById('friends-list-container')
 };
 
 const TOTAL_LEVELS = 7, LEVEL_DURATION_SEC = 25, INTRO_DURATION_MS = 2000;
@@ -734,205 +749,15 @@ function saveProfile() { localStorage.setItem('pcg_profile_v1', JSON.stringify(u
 function calculateLevel(xp) { if (xp <= 0) return 1; return Math.floor(Math.sqrt(xp / 10)) + 1; }
 function getXpForLevel(level) { return (level - 1) * (level - 1) * 10; }
 function addXp(amount) { userProfile.xp += amount; saveProfile(); }
-
-function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, (m) => {
-        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
-    });
-}
-
-function safeAvatarUrl(url) {
-    return typeof url === 'string' && url.startsWith('data:image/') ? url : '';
-}
-
-function getLocalProfileFields() {
-    const xp = Number(userProfile.xp || 0);
-    return {
-        nickname: userProfile.nickname || 'Guest',
-        avatar: safeAvatarUrl(userProfile.avatarData),
-        xp,
-        level: calculateLevel(xp)
-    };
-}
-
-function makePlayerRecord(ready = false) {
-    return {
-        id: myUserId,
-        ...getLocalProfileFields(),
-        score: 0,
-        accuracy: 0,
-        ready
-    };
-}
-
-function updateLocalInGameProfile() {
-    const xp = Number(userProfile.xp || 0);
-    const lvl = calculateLevel(xp);
-    const cur = getXpForLevel(lvl);
-    const next = getXpForLevel(lvl + 1);
-    const pct = next > cur ? Math.max(0, Math.min(100, ((xp - cur) / (next - cur)) * 100)) : 100;
-    const av = safeAvatarUrl(userProfile.avatarData);
-
-    if (av) {
-        els.igAvatar.src = av;
-        els.igAvatar.style.display = 'block';
-        els.igAvatarPh.style.display = 'none';
-    } else {
-        els.igAvatar.removeAttribute('src');
-        els.igAvatar.style.display = 'none';
-        els.igAvatarPh.style.display = 'flex';
-    }
-
-    els.igNick.textContent = userProfile.nickname || 'Guest';
-    els.igLevel.textContent = `LVL ${lvl}`;
-    els.igXpFill.style.width = `${pct}%`;
-}
-
-function buildGameProfileCard(player, positionClass = '') {
-    const xp = Number(player.xp || 0);
-    const lvl = Number(player.level || calculateLevel(xp));
-    const cur = getXpForLevel(lvl);
-    const next = getXpForLevel(lvl + 1);
-    const pct = next > cur ? Math.max(0, Math.min(100, ((xp - cur) / (next - cur)) * 100)) : 100;
-    const av = safeAvatarUrl(player.avatar);
-    const avatarHtml = av
-        ? `<img src="${escapeHtml(av)}" alt="">`
-        : `<div class="pc-avatar-ph">👤</div>`;
-    const name = escapeHtml(player.nickname || 'Guest');
-
-    return `
-        <div class="game-profile-card remote-profile ${positionClass}">
-            ${avatarHtml}
-            <div class="pc-text">
-                <span class="pc-name">${name}</span>
-                <div class="pc-meta">
-                    <span>LVL ${lvl}</span>
-                    <div class="pc-xpbar"><div class="pc-xpfill" style="width:${pct}%"></div></div>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function renderOnlineHud() {
-    if (!state.roomData || !Array.isArray(state.roomData.players)) return;
-
-    updateLocalInGameProfile();
-
-    els.onlinePlayerCorners.innerHTML = '';
-    const positions = ['top-right', 'bottom-left', 'bottom-right'];
-    let posIndex = 0;
-
-    for (const p of state.roomData.players) {
-        if (p.id === myUserId) continue;
-
-        const cls = positions[posIndex % positions.length];
-        els.onlinePlayerCorners.insertAdjacentHTML('beforeend', buildGameProfileCard(p, cls));
-        posIndex++;
-    }
-
-    renderMiniLeaderboard(state.roomData.players);
-}
-
-function renderMiniLeaderboard(players) {
-    const sorted = [...players].sort((a, b) => {
-        const sa = Number(a.score || 0);
-        const sb = Number(b.score || 0);
-        if (sb !== sa) return sb - sa;
-        return Number(b.accuracy || 0) - Number(a.accuracy || 0);
-    });
-
-    els.miniLeaderboard.innerHTML = sorted.map((p, i) => {
-        const av = safeAvatarUrl(p.avatar);
-        const avatarHtml = av
-            ? `<img class="mini-lb-avatar" src="${escapeHtml(av)}" alt="">`
-            : `<div class="mini-lb-avatar mini-lb-avatar-ph">👤</div>`;
-
-        const isMe = p.id === myUserId ? ' mini-lb-me' : '';
-        const score = Number(p.score || 0);
-        const name = escapeHtml(p.nickname || 'Guest');
-
-        return `<div class="mini-lb-item${isMe}"><span class="mini-lb-rank">${i + 1}</span>${avatarHtml}<span class="mini-lb-name">${name}</span><span class="mini-lb-score">${score}</span></div>`;
-    }).join('');
-}
-
-function getOnlineLocalScore() {
-    if (!state.stats) return 0;
-    return (state.stats.fast || 0) * 10 + (state.stats.med || 0) * 5 + (state.stats.slow || 0) * 1;
-}
-
-function getOnlineLocalAccuracy() {
-    if (!state.stats || !state.stats.total) return 0;
-    return ((state.stats.fast || 0) / state.stats.total) * 100;
-}
-
-let onlineScoreSyncTimer = null;
-
-function scheduleOnlineScoreSync() {
-    if (!window.fbDb || !window.fbFunctions || !state.roomId || state.phase !== 'ONLINE_PLAYING') return;
-    if (onlineScoreSyncTimer) return;
-
-    onlineScoreSyncTimer = setTimeout(async () => {
-        onlineScoreSyncTimer = null;
-
-        if (state.phase !== 'ONLINE_PLAYING') return;
-
-        try {
-            const ref = window.fbFunctions.doc(window.fbDb, 'servers', state.roomId);
-
-            await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
-                const snap = await transaction.get(ref);
-                if (!snap.exists()) return;
-
-                const data = snap.data();
-                const idx = data.players.findIndex(p => p.id === myUserId);
-                if (idx === -1) return;
-
-                data.players[idx] = {
-                    ...data.players[idx],
-                    ...getLocalProfileFields(),
-                    score: getOnlineLocalScore(),
-                    accuracy: getOnlineLocalAccuracy()
-                };
-
-                transaction.update(ref, { players: data.players });
-            });
-        } catch (e) {
-            console.warn('Online score sync error:', e);
-        }
-    }, 1000);
-}
-
 function updateProfileUI() {
     els.nicknameInput.value = userProfile.nickname || '';
-
-    const menuAv = safeAvatarUrl(userProfile.avatarData);
-    if (menuAv) {
-        els.avatarImg.src = menuAv;
-        els.avatarImg.style.display = 'block';
-        els.avatarPlaceholder.style.display = 'none';
-    } else {
-        els.avatarImg.removeAttribute('src');
-        els.avatarImg.style.display = 'none';
-        els.avatarPlaceholder.style.display = 'flex';
-    }
-
-    const cl = calculateLevel(userProfile.xp);
-    const plx = getXpForLevel(cl);
-    const nlx = getXpForLevel(cl + 1);
-    const pip = userProfile.xp - plx;
-    const tn = nlx - plx;
-    const per = tn > 0 ? (pip / tn) * 100 : 100;
-
-    els.levelText.textContent = `LVL ${cl}`;
-    els.xpText.textContent = `${userProfile.xp} / ${nlx} XP`;
-    els.xpFill.style.width = `${per}%`;
-
-    updateLocalInGameProfile();
+    if (userProfile.avatarData) { els.avatarImg.src = userProfile.avatarData; els.avatarImg.style.display = 'block'; els.avatarPlaceholder.style.display = 'none'; } else { els.avatarImg.style.display = 'none'; els.avatarPlaceholder.style.display = 'flex'; }
+    const cl = calculateLevel(userProfile.xp); const plx = getXpForLevel(cl); const nlx = getXpForLevel(cl + 1); const pip = userProfile.xp - plx; const tn = nlx - plx; const per = tn > 0 ? (pip / tn) * 100 : 100;
+    els.levelText.textContent = `LVL ${cl}`; els.xpText.textContent = `${userProfile.xp} / ${nlx} XP`; els.xpFill.style.width = `${per}%`;
 }
 els.nicknameInput.oninput = (e) => { userProfile.nickname = e.target.value.trim(); clearTimeout(window.nickSaveTimeout); window.nickSaveTimeout = setTimeout(() => { saveProfile(); }, 500); };
 
-// Settings - FIXED
+// Settings
 function loadSettings() { const s = localStorage.getItem('pcg_fixedres_v24'); return s ? JSON.parse(s) : { cursorSize: 10, sensitivity: 1.0, soundEnabled: true, volume: 50, fpsLimit: 144 }; }
 function saveSettings() { localStorage.setItem('pcg_fixedres_v24', JSON.stringify(userSettings)); applyCursorStyle(); }
 function applyCursorStyle() { 
@@ -981,29 +806,37 @@ function handleTargetClick() {
         if (dx*dx + dy*dy <= radius*radius) {
             t.dead = true; 
             state.stats.total++;
-
-            if (state.phase === 'PLAYING' || state.phase === 'ONLINE_PLAYING') {
+            
+            // NEW SCORING SYSTEM: 0-10 points based on remaining life
+            const remainingLifeMs = t.expireTime - performance.now();
+            const lifePercent = Math.max(0, Math.min(100, (remainingLifeMs / t.totalLife) * 100));
+            const points = Math.min(10, Math.floor(lifePercent / 10));
+            
+            state.stats.score += points;
+            state.stats.totalPoints += points;
+            
+            // Visual feedback based on points
+            if (points >= 8) { t.el.classList.add('grade-fast'); SFX.fast(); }
+            else if (points >= 5) { t.el.classList.add('grade-medium'); SFX.med(); }
+            else { t.el.classList.add('grade-slow'); SFX.slow(); }
+            
+            if(state.phase === 'ONLINE_PLAYING') {
+                state.localScore += points;
+                updateOnlineLeaderboardHud(state.players);
+            } else {
                 const oldLevel = calculateLevel(userProfile.xp);
                 addXp(1);
                 const newLevel = calculateLevel(userProfile.xp);
                 if (newLevel > oldLevel) SFX.levelUp();
             }
 
-            if (state.phase === 'ONLINE_PLAYING') {
-                scheduleOnlineScoreSync();
-            }
-
-            const r = (performance.now() - t.spawnTime) / t.totalLife;
-            if (r < 0.67) { t.el.classList.add('grade-fast'); state.stats.fast++; SFX.fast(); }
-            else if (r < 0.85) { t.el.classList.add('grade-medium'); state.stats.med++; SFX.med(); }
-            else { t.el.classList.add('grade-slow'); state.stats.slow++; SFX.slow(); }
             setTimeout(() => { if (t.el.parentNode) t.el.remove(); const idx = state.targets.findIndex(tt => tt.id === t.id); if (idx > -1) state.targets.splice(idx, 1); }, 150);
             break;
         }
     }
 }
 
-// Keyboard & Navigation Logic - FIXED
+// Keyboard & Navigation Logic
 window.addEventListener('keydown', e => { 
     if (els.cropModal.style.display === 'block') {
         const key = e.key.toLowerCase();
@@ -1012,10 +845,10 @@ window.addEventListener('keydown', e => {
         return;
     }
     if (e.key === 'Escape') { 
-        // Priority order for closing modals
         if(els.cropModal.style.display === 'block') { els.cropModal.style.display = 'none'; return; }
         if(els.inventoryModal.style.display === 'block') { els.inventoryModal.style.display = 'none'; return; }
         if(els.shopModal.style.display === 'block') { els.shopModal.style.display = 'none'; return; }
+        if(els.friendsModal.style.display === 'block') { els.friendsModal.style.display = 'none'; return; }
         if(els.settingsModal.style.display === 'block') { els.settingsModal.style.display = 'none'; return; }
         
         if(state.phase === 'ONLINE_LOBBY') { leaveLobby(); return; }
@@ -1096,7 +929,6 @@ function openLevelSelect() {
     resetCursorToCenter(); 
 }
 
-// FIX: Back button in levels goes to Mode Choice
 els.btnCloseLevels.onclick = () => { 
     els.levelModal.style.display = 'none'; 
     els.modeChoiceModal.style.display = 'block'; 
@@ -1121,7 +953,6 @@ function renderLevelList() {
                 els.levelModal.style.display = 'none';
                 startIntroSequence(i, selectedDifficulty);
             } else {
-                // Online flow: Show Action Modal (Create/Find)
                 pendingOnlineLevel = i;
                 els.levelModal.style.display = 'none';
                 els.onlineActionModal.style.display = 'block';
@@ -1152,7 +983,6 @@ els.btnGoFind.onclick = () => {
     fetchServers();
 };
 
-// Create Server Modal Navigation
 els.btnCancelCreate.onclick = () => {
     els.createServerModal.style.display = 'none';
     els.onlineActionModal.style.display = 'block';
@@ -1164,7 +994,6 @@ els.serverDurationSlider.oninput = (e) => {
 
 els.btnConfirmCreate.onclick = async () => {
     if (!window.fbDb) return alert("Firebase не подключен");
-
     const name = els.serverNameInput.value.trim() || "Unnamed Room";
     const duration = parseInt(els.serverDurationSlider.value);
     
@@ -1176,10 +1005,9 @@ els.btnConfirmCreate.onclick = async () => {
             difficulty: selectedDifficulty,
             level: pendingOnlineLevel,
             status: "waiting",
-            players: [makePlayerRecord(false)],
+            players: [{ id: myUserId, nickname: userProfile.nickname || "Host", avatar: userProfile.avatarData, score: 0, accuracy: 0, ready: false, xp: userProfile.xp }],
             createdAt: window.fbFunctions.serverTimestamp()
         });
-
         enterLobby(roomRef.id);
     } catch (err) {
         console.error(err);
@@ -1187,7 +1015,6 @@ els.btnConfirmCreate.onclick = async () => {
     }
 };
 
-// Server List Modal Navigation
 els.btnBackToAction.onclick = () => {
     els.onlineServerModal.style.display = 'none';
     els.onlineActionModal.style.display = 'block';
@@ -1224,7 +1051,6 @@ async function fetchServers() {
             const data = docSnap.data();
             const createdTime = data.createdAt ? data.createdAt.toMillis() : 0;
             
-            // AUTO DELETE OLD ROOMS (> 1 min)
             if (now - createdTime > oneMinute) {
                 await window.fbFunctions.deleteDoc(window.fbFunctions.doc(window.fbDb, "servers", docSnap.id));
                 continue;
@@ -1255,28 +1081,23 @@ async function fetchServers() {
 
 async function joinServer(roomId) {
     if (!window.fbDb) return;
-
     try {
         await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
             const ref = window.fbFunctions.doc(window.fbDb, "servers", roomId);
             const snap = await transaction.get(ref);
-
             if (!snap.exists()) throw new Error("Комната удалена");
             
             const data = snap.data();
-
             if (data.players.length >= 4) throw new Error("Комната полная");
             if (data.status !== "waiting") throw new Error("Игра началась");
             
             if (data.players.some(p => p.id === myUserId)) return;
 
-            const newPlayer = makePlayerRecord(false);
-
+            const newPlayer = { id: myUserId, nickname: userProfile.nickname || "Guest", avatar: userProfile.avatarData, score: 0, accuracy: 0, ready: false, xp: userProfile.xp };
             transaction.update(ref, {
                 players: [...data.players, newPlayer]
             });
         });
-
         enterLobby(roomId);
     } catch (err) {
         alert(err.message);
@@ -1299,28 +1120,24 @@ function listenToRoom(roomId) {
     if (currentRoomListener) currentRoomListener();
     
     const ref = window.fbFunctions.doc(window.fbDb, "servers", roomId);
-
     currentRoomListener = window.fbFunctions.onSnapshot(ref, (docSnap) => {
         if (!docSnap.exists()) {
             alert("Комната закрыта");
             leaveLobby();
             return;
         }
-
         const data = docSnap.data();
         state.players = data.players;
-        state.roomData = data;
         isHost = (data.hostId === myUserId);
         
         els.lobbyRoomName.textContent = data.name;
         els.lobbyPlayerCount.textContent = `${data.players.length}/4`;
         els.lobbyPlayersList.innerHTML = '';
-
         data.players.forEach(p => {
             const li = document.createElement('li');
             li.style.cssText = "padding:5px; border-bottom:1px solid #333; display:flex; justify-content:space-between;";
             const readyIcon = p.ready ? "✅" : "⏳";
-            li.innerHTML = `<span>${escapeHtml(p.nickname || 'Guest')} ${readyIcon}</span> <span style="color:#888;font-size:12px;">Score: ${Number(p.score) || 0}</span>`;
+            li.innerHTML = `<span>${p.nickname} ${readyIcon}</span> <span style="color:#888;font-size:12px;">Score: ${p.score}</span>`;
             els.lobbyPlayersList.appendChild(li);
         });
         
@@ -1329,23 +1146,15 @@ function listenToRoom(roomId) {
             els.lobbyStatusText.textContent = "Вы Хост. Нажмите НАЧАТЬ ИГРУ, когда будете готовы.";
         } else {
             els.btnHostStart.style.display = 'none';
-            if (data.status === "starting") {
-                els.lobbyStatusText.textContent = "Игра готовится к запуску...";
-            }
+            if(data.status === "starting") els.lobbyStatusText.textContent = "Игра готовится к запуску...";
         }
 
-        if (state.phase === 'ONLINE_PLAYING') {
-            renderOnlineHud();
-        }
-
-        if (data.status === "starting" && state.phase === 'ONLINE_LOBBY') {
-            showReadyPhase();
-        }
-
-        if (data.status === "playing" && state.phase === 'ONLINE_READY') {
-            startOnlineGame(data);
-        } else if (data.status === "finished") {
-            showOnlineResults(data);
+        if (data.status === "starting" && state.phase === 'ONLINE_LOBBY') showReadyPhase();
+        if (data.status === "playing" && state.phase === 'ONLINE_READY') startOnlineGame(data);
+        else if (data.status === "finished") showOnlineResults(data);
+        
+        if (data.status === "playing" || data.status === "finished") {
+            updateOnlineLeaderboardHud(data.players);
         }
     }, (err) => console.error(err));
 }
@@ -1363,7 +1172,8 @@ function leaveLobby() {
     state.phase = 'MENU';
     els.lobbyModal.style.display = 'none';
     els.readyOverlay.style.display = 'none';
-    els.onlineServerModal.style.display = 'block'; // Go back to list or action? Let's go to list
+    els.onlineLeaderboardHud.style.display = 'none';
+    els.onlineServerModal.style.display = 'block';
     fetchServers();
 }
 
@@ -1377,31 +1187,22 @@ function showReadyPhase() {
 }
 
 async function markAsReady() {
-    if (amReady) return;
-
+    if(amReady) return;
     amReady = true;
     els.readyText.textContent = "WAITING FOR OTHERS...";
     els.readyCircle.style.borderColor = "#0F0";
     els.readyCircle.style.boxShadow = "0 0 20px rgba(0,255,0,0.5)";
     
     const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
-
     await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
         const snap = await transaction.get(ref);
         const data = snap.data();
         const pIdx = data.players.findIndex(p => p.id === myUserId);
-
         if (pIdx !== -1) {
-            data.players[pIdx] = {
-                ...data.players[pIdx],
-                ...getLocalProfileFields(),
-                ready: true
-            };
-
+            data.players[pIdx].ready = true;
             transaction.update(ref, { players: data.players });
         }
     });
-
     checkAllReady();
 }
 
@@ -1417,26 +1218,63 @@ async function checkAllReady() {
     });
 }
 
+// --- LEADERBOARD HUD LOGIC ---
+function updateOnlineLeaderboardHud(players) {
+    if (!players || players.length === 0) return;
+    
+    const sorted = [...players].sort((a, b) => {
+        const scoreA = a.id === myUserId ? state.localScore : (a.score || 0);
+        const scoreB = b.id === myUserId ? state.localScore : (b.score || 0);
+        return scoreB - scoreA;
+    });
+    
+    els.lbList.innerHTML = '';
+    
+    sorted.forEach((player, index) => {
+        const isSelf = player.id === myUserId;
+        const isLeader = index === 0;
+        const score = isSelf ? state.localScore : (player.score || 0);
+        const level = calculateLevel(player.xp || 0);
+        
+        const entry = document.createElement('div');
+        entry.className = `lb-entry ${isSelf ? 'is-self' : ''} ${isLeader ? 'is-leader' : ''}`;
+        
+        const avatarHtml = player.avatar 
+            ? `<img src="${player.avatar}" class="lb-avatar">` 
+            : `<div class="lb-avatar" style="display:flex;align-items:center;justify-content:center;color:#555;">👤</div>`;
+        
+        entry.innerHTML = `
+            <div class="lb-rank">${index + 1}</div>
+            ${avatarHtml}
+            <div class="lb-info">
+                <div class="lb-name">${player.nickname || 'Anon'}</div>
+                <div class="lb-level">LVL ${level}</div>
+            </div>
+            <div class="lb-score">${score}</div>
+        `;
+        
+        els.lbList.appendChild(entry);
+    });
+    
+    els.onlineLeaderboardHud.style.display = 'block';
+}
+
 function startOnlineGame(roomData) {
     state.phase = 'ONLINE_PLAYING';
+    state.localScore = 0;
     els.readyOverlay.style.display = 'none';
-
     showGameUI();
-
-    state.roomData = roomData;
-
+    
+    updateOnlineLeaderboardHud(roomData.players);
+    
     const cfg = getLevelConfig(roomData.level, roomData.difficulty);
     state.config = cfg;
-    state.stats = { total: 0, fast: 0, med: 0, slow: 0 };
-
+    state.stats = { total: 0, score: 0, totalPoints: 0 };
     state.levelStartTime = performance.now();
     state.nextSpawnTime = state.levelStartTime + 500;
     state.gameEndTime = state.levelStartTime + (roomData.duration * 1000);
-
     els.modeIndicator.textContent = "ONLINE";
     els.modeIndicator.className = "mode-online";
-
-    renderOnlineHud();
     loop(performance.now());
 }
 
@@ -1456,75 +1294,39 @@ function updateOnlinePlaying(now) {
 }
 
 async function endOnlineGame(missed = false) {
-    stopLoop();
-    clearTargets();
-    state.phase = 'ONLINE_FINISHED';
-
-    if (onlineScoreSyncTimer) {
-        clearTimeout(onlineScoreSyncTimer);
-        onlineScoreSyncTimer = null;
-    }
-
-    const score = getOnlineLocalScore();
-    const accuracy = getOnlineLocalAccuracy();
-
+    stopLoop(); clearTargets(); state.phase = 'ONLINE_FINISHED';
+    const score = state.localScore;
+    const accuracy = state.stats.total > 0 ? (state.stats.totalPoints / (state.stats.total * 10)) * 100 : 0;
+    
+    els.onlineLeaderboardHud.style.display = 'none';
+    
     if (window.fbDb && state.roomId) {
         const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
-
         await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
             const snap = await transaction.get(ref);
-            if (!snap.exists()) return;
-
             const data = snap.data();
             const pIdx = data.players.findIndex(p => p.id === myUserId);
-
             if (pIdx !== -1) {
-                data.players[pIdx] = {
-                    ...data.players[pIdx],
-                    ...getLocalProfileFields(),
-                    score,
-                    accuracy,
-                    ready: false
-                };
-
-                transaction.update(ref, {
-                    players: data.players,
-                    status: "finished"
-                });
+                data.players[pIdx].score = score;
+                data.players[pIdx].accuracy = accuracy;
+                data.players[pIdx].ready = false;
+                transaction.update(ref, { players: data.players, status: "finished" });
             }
         });
     }
 }
 
 function showOnlineResults(roomData) {
-    els.gameArea.style.display = 'none';
-    els.hud.style.opacity = '0';
-
+    els.gameArea.style.display = 'none'; els.hud.style.opacity = '0';
+    els.onlineLeaderboardHud.style.display = 'none';
     els.onlineResultsScreen.style.display = 'block';
-
-    const sorted = [...roomData.players].sort((a, b) => {
-        return Number(b.score || 0) - Number(a.score || 0);
-    });
-
+    const sorted = [...roomData.players].sort((a,b) => b.score - a.score);
     els.onlineLeaderboard.innerHTML = '';
-
     sorted.forEach((p, index) => {
         const tr = document.createElement('tr');
-
         let rankClass = "";
-        if (index === 0) rankClass = "rank-1";
-        else if (index === 1) rankClass = "rank-2";
-        else if (index === 2) rankClass = "rank-3";
-
-        const acc = Number(p.accuracy || 0).toFixed(1);
-
-        tr.innerHTML = `
-            <td class="${rankClass}">${index + 1}</td>
-            <td>${escapeHtml(p.nickname || 'Guest')}</td>
-            <td>${Number(p.score) || 0}</td>
-            <td>${acc}%</td>
-        `;
-
+        if(index === 0) rankClass = "rank-1"; else if(index === 1) rankClass = "rank-2"; else if(index === 2) rankClass = "rank-3";
+        tr.innerHTML = `<td class="${rankClass}">${index + 1}</td><td>${p.nickname}</td><td>${p.score}</td><td>${p.accuracy.toFixed(1)}%</td>`;
         els.onlineLeaderboard.appendChild(tr);
     });
 }
@@ -1545,43 +1347,17 @@ function getLevelConfig(lvl, mode) {
     return { spawnInterval, lifetime, targetSize, maxTargets: 1 };
 }
 
-let state = { phase: 'MENU', currentLevel: 1, currentMode: 'normal', levelStartTime: 0, introStartTime: 0, lastFrameTime: 0, nextSpawnTime: 0, targets: [], animationId: null, config: null, stats: {}, frameCount: 0, lastFpsUpdate: 0, currentFps: 0, roomId: null, players: [], roomData: null };
+let state = { phase: 'MENU', currentLevel: 1, currentMode: 'normal', levelStartTime: 0, introStartTime: 0, lastFrameTime: 0, nextSpawnTime: 0, targets: [], animationId: null, config: null, stats: {}, frameCount: 0, lastFpsUpdate: 0, currentFps: 0, roomId: null, players: [], localScore: 0 };
 
-function showGameUI() {
-    els.bottomMenu.classList.add('hidden');
-    els.profileWidget.classList.add('hidden-by-game');
-
-    els.gameArea.style.display = 'block';
-    els.hud.style.opacity = '1';
-
-    els.onlinePlayerCorners.innerHTML = '';
-    els.miniLeaderboard.innerHTML = '';
-    state.roomData = null;
-}
-
-function hideGameUI() {
-    els.bottomMenu.classList.remove('hidden');
-    els.profileWidget.classList.remove('hidden-by-game');
-
-    els.gameArea.style.display = 'none';
-    els.hud.style.opacity = '0';
-    els.introOverlay.style.display = 'none';
-    els.bigCircle.style.display = 'none';
-    els.readyOverlay.style.display = 'none';
-    els.sensIndicator.style.opacity = '0';
-
-    els.onlinePlayerCorners.innerHTML = '';
-    els.miniLeaderboard.innerHTML = '';
-    state.roomData = null;
-}
-
+function showGameUI() { els.bottomMenu.classList.add('hidden'); els.gameArea.style.display = 'block'; els.hud.style.opacity = '1'; }
+function hideGameUI() { els.bottomMenu.classList.remove('hidden'); els.gameArea.style.display = 'none'; els.hud.style.opacity = '0'; els.introOverlay.style.display = 'none'; els.bigCircle.style.display = 'none'; els.readyOverlay.style.display = 'none'; els.sensIndicator.style.opacity = '0'; els.onlineLeaderboardHud.style.display = 'none'; }
 function backToMainMenu() { stopLoop(); clearTargets(); state.phase = 'MENU'; hideAllModals(); hideGameUI(); resetCursorToCenter(); }
 function hideAllModals() { 
-    els.levelModal.style.display = 'none'; els.resultsScreen.style.display = 'none'; els.settingsModal.style.display = 'none'; els.inventoryModal.style.display = 'none'; els.shopModal.style.display = 'none'; els.modeChoiceModal.style.display = 'none'; els.onlineServerModal.style.display = 'none'; els.createServerModal.style.display = 'none'; els.lobbyModal.style.display = 'none'; els.onlineResultsScreen.style.display = 'none'; els.onlineActionModal.style.display = 'none';
+    els.levelModal.style.display = 'none'; els.resultsScreen.style.display = 'none'; els.settingsModal.style.display = 'none'; els.inventoryModal.style.display = 'none'; els.shopModal.style.display = 'none'; els.modeChoiceModal.style.display = 'none'; els.onlineServerModal.style.display = 'none'; els.createServerModal.style.display = 'none'; els.lobbyModal.style.display = 'none'; els.onlineResultsScreen.style.display = 'none'; els.onlineActionModal.style.display = 'none'; els.friendsModal.style.display = 'none';
 }
 
 function startIntroSequence(lvl, mode) {
-    state.currentLevel = lvl; state.currentMode = mode; state.config = getLevelConfig(lvl, mode); state.stats = {total:0,fast:0,med:0,slow:0,missed:false}; state.phase = 'INTRO'; hideAllModals(); showGameUI();
+    state.currentLevel = lvl; state.currentMode = mode; state.config = getLevelConfig(lvl, mode); state.stats = {total:0, score:0, totalPoints:0, missed:false}; state.phase = 'INTRO'; hideAllModals(); showGameUI();
     els.modeIndicator.textContent = mode.toUpperCase();
     if(mode === 'normal') els.modeIndicator.className = 'mode-normal'; else if(mode === 'medium') els.modeIndicator.className = 'mode-medium'; else els.modeIndicator.className = 'mode-hard';
     resetCursorToCenter(); updateSensIndicator();
@@ -1596,7 +1372,8 @@ function finishLevel(survived) {
     state.phase = 'RESULTS'; stopLoop(); clearTargets(); resetCursorToCenter();
     let stars=0, isRed=false;
     if(survived){ 
-        const acc = state.stats.total>0?(state.stats.fast/state.stats.total):0; 
+        const maxPossiblePoints = state.stats.total * 10;
+        const acc = maxPossiblePoints > 0 ? (state.stats.totalPoints / maxPossiblePoints) : 0; 
         if(acc===1){stars=3;isRed=true;} else if(acc>=0.85)stars=3; else if(acc>=0.55)stars=2; else if(acc>=0.25)stars=1;
         const pr = playerProgress.ratings[state.currentMode][state.currentLevel]; const nr = {stars,isRed}; 
         if(!pr||stars>pr.stars||(stars===pr.stars&&isRed&&!pr.isRed)) playerProgress.ratings[state.currentMode][state.currentLevel]=nr;
@@ -1610,8 +1387,9 @@ function showResults(stars, survived, isRed) {
     els.resultTitle.textContent = survived?"УРОВЕНЬ ПРОЙДЕН!":"ПРОМАХ!"; els.resultTitle.style.color = survived?"#0F0":"#F44";
     let ss=''; for(let i=1;i<=3;i++){ let c='#333',sh='none'; if(i<=stars){ if(isRed){c='#F00';sh='0 0 20px #F00';}else if(stars===3){c='#FFD700';sh='0 0 15px #FFD700';}else if(stars===2){c='#C0C0C0';sh='0 0 15px #C0C0C0';}else if(stars===1){c='#CD7F32';sh='0 0 15px #CD7F32';}} ss+=`<span style="color:${c};text-shadow:${sh}">★</span>`; }
     els.resultStars.innerHTML = ss;
-    const acc = state.stats.total>0?((state.stats.fast/state.stats.total)*100).toFixed(1):0;
-    els.resultStats.innerHTML = `Режим: ${state.currentMode.toUpperCase()}<br>Всего: ${state.stats.total}<br>Быстрых: ${state.stats.fast}<br>Средних: ${state.stats.med}<br>Медленных: ${state.stats.slow}<br>Точность: ${acc}%`;
+    const maxPossiblePoints = state.stats.total * 10;
+    const acc = maxPossiblePoints > 0 ? ((state.stats.totalPoints / maxPossiblePoints)*100).toFixed(1) : 0;
+    els.resultStats.innerHTML = `Режим: ${state.currentMode.toUpperCase()}<br>Всего кругов: ${state.stats.total}<br>Очки: ${state.stats.totalPoints}<br>Точность: ${acc}%`;
     els.btnNext.style.display = (survived && state.currentLevel<TOTAL_LEVELS)?'inline-block':'none';
 }
 
@@ -1680,7 +1458,7 @@ els.btnCloseShop.onclick = () => els.shopModal.style.display = 'none';
 function renderInventory() { els.inventoryGrid.innerHTML = '<div class="empty-text">Инвентарь пуст</div>'; }
 function renderShop() { els.shopGrid.innerHTML = '<div class="empty-text">Нет доступных товаров</div>'; }
 
-// Settings UI Update Fix
+// Settings UI Update
 function updateSettingsUI() {
     if(userSettings.cursorSize > 12) userSettings.cursorSize = 12;
     els.cursorSizeSlider.value = userSettings.cursorSize; els.cursorSizeVal.textContent = userSettings.cursorSize;
@@ -1785,6 +1563,106 @@ function confirmCrop() {
     els.cropModal.style.display = 'none'; cropState.img = null;
 }
 els.btnConfirmCrop.onclick = confirmCrop;
+
+// --- FRIENDS SYSTEM ---
+let friendsList = loadFriends();
+
+function loadFriends() {
+    const s = localStorage.getItem('pcg_friends_v1');
+    return s ? JSON.parse(s) : [];
+}
+
+function saveFriends() {
+    localStorage.setItem('pcg_friends_v1', JSON.stringify(friendsList));
+}
+
+function renderFriendsList() {
+    els.friendsListContainer.innerHTML = '';
+    
+    if (friendsList.length === 0) {
+        els.friendsListContainer.innerHTML = '<div class="empty-text">Список друзей пуст</div>';
+        return;
+    }
+    
+    friendsList.forEach((friend, index) => {
+        const item = document.createElement('div');
+        item.className = 'friend-item';
+        
+        const avatarHtml = friend.avatar 
+            ? `<img src="${friend.avatar}" class="friend-avatar">` 
+            : `<div class="friend-avatar" style="display:flex;align-items:center;justify-content:center;color:#555;">👤</div>`;
+        
+        item.innerHTML = `
+            ${avatarHtml}
+            <div class="friend-info">
+                <div class="friend-name">${friend.nickname}</div>
+                <div class="friend-status">${friend.online ? '🟢 В сети' : '⚫ Не в сети'}</div>
+            </div>
+            <button class="invite-friend-btn" data-index="${index}">ПРИГЛАСИТЬ</button>
+            <button class="remove-friend-btn" data-index="${index}">УДАЛИТЬ</button>
+        `;
+        
+        els.friendsListContainer.appendChild(item);
+    });
+    
+    els.friendsListContainer.querySelectorAll('.remove-friend-btn').forEach(btn => {
+        btn.onclick = (e) => {
+            const idx = parseInt(e.target.dataset.index);
+            friendsList.splice(idx, 1);
+            saveFriends();
+            renderFriendsList();
+        };
+    });
+    
+    els.friendsListContainer.querySelectorAll('.invite-friend-btn').forEach(btn => {
+        btn.onclick = (e) => {
+            const idx = parseInt(e.target.dataset.index);
+            const friend = friendsList[idx];
+            alert(`Приглашение отправлено игроку ${friend.nickname}! (Функция в разработке)`);
+        };
+    });
+}
+
+els.btnFriends.onclick = () => {
+    renderFriendsList();
+    els.friendsModal.style.display = 'block';
+};
+
+els.btnCloseFriends.onclick = () => {
+    els.friendsModal.style.display = 'none';
+};
+
+els.btnAddFriend.onclick = () => {
+    const nickname = els.addFriendInput.value.trim();
+    if (!nickname) {
+        alert('Введите никнейм друга');
+        return;
+    }
+    
+    if (friendsList.some(f => f.nickname.toLowerCase() === nickname.toLowerCase())) {
+        alert('Этот друг уже в вашем списке');
+        return;
+    }
+    
+    const newFriend = {
+        id: 'friend_' + Date.now(),
+        nickname: nickname,
+        avatar: null,
+        online: false,
+        addedAt: Date.now()
+    };
+    
+    friendsList.push(newFriend);
+    saveFriends();
+    els.addFriendInput.value = '';
+    renderFriendsList();
+};
+
+els.addFriendInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        els.btnAddFriend.click();
+    }
+});
 
 // Init
 applyCursorStyle(); 
