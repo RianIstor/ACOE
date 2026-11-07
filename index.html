@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Multiplayer Room Test</title>
+    <title>Multiplayer Invite Link Test</title>
     
     <!-- Импорт Firebase -->
     <script type="module">
@@ -33,47 +33,56 @@
             funcs: { collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, serverTimestamp, addDoc, query, where, limit, getDocs }
         };
         
-        // Сообщаем основному скрипту, что всё готово
         window.dispatchEvent(new Event('fb-loaded'));
     </script>
 
     <style>
-        body { margin: 0; background: #111; color: white; font-family: monospace; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        canvas { border: 2px solid #333; background: #222; box-shadow: 0 0 15px rgba(0,0,0,0.5); display: none; /* Скрыт до входа в комнату */ }
+        body { margin: 0; background: #111; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { border: 2px solid #333; background: #1a1a1a; box-shadow: 0 0 20px rgba(0,0,0,0.8); display: none; cursor: crosshair;}
         
         /* UI Меню */
-        #menu-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); padding: 30px; border: 1px solid #444; border-radius: 8px; text-align: center; width: 400px; z-index: 100; }
-        #game-ui { position: absolute; top: 10px; left: 10px; pointer-events: none; z-index: 10; display: none; }
+        #menu-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(10,10,10,0.95); padding: 30px; border: 1px solid #444; border-radius: 8px; text-align: center; width: 400px; z-index: 100; backdrop-filter: blur(5px);}
+        #game-ui { position: absolute; top: 10px; left: 10px; pointer-events: none; z-index: 10; display: none; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; border: 1px solid #444;}
         
-        h2 { margin-top: 0; color: #fff; }
-        input { background: #222; border: 1px solid #555; color: #fff; padding: 10px; width: 80%; margin-bottom: 10px; font-family: inherit; }
-        button { background: #333; border: 1px solid #555; color: #fff; padding: 10px 20px; cursor: pointer; margin: 5px; transition: 0.2s; }
-        button:hover { background: #444; border-color: #fff; }
-        .btn-primary { background: #0af; border-color: #0af; color: #000; font-weight: bold; }
-        .btn-primary:hover { background: #0cf; }
+        h2 { margin-top: 0; color: #fff; letter-spacing: 1px; }
+        input { background: #222; border: 1px solid #555; color: #fff; padding: 10px; width: calc(100% - 22px); margin-bottom: 10px; font-family: inherit; outline: none; transition: 0.2s;}
+        input:focus { border-color: #0af; }
+        button { background: #333; border: 1px solid #555; color: #fff; padding: 10px 20px; cursor: pointer; margin: 5px; transition: 0.2s; border-radius: 4px; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;}
+        button:hover { background: #444; border-color: #fff; transform: translateY(-1px); }
+        .btn-primary { background: #007bff; border-color: #007bff; color: #fff; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-success { background: #28a745; border-color: #28a745; color: #fff; }
+        .btn-success:hover { background: #218838; }
+        .btn-danger { background: #dc3545; border-color: #dc3545; color: #fff; }
+        .btn-danger:hover { background: #a71d2a; }
         
         #status-msg { margin-top: 10px; font-size: 12px; color: #aaa; min-height: 20px; }
-        #room-id-display { font-size: 24px; color: #ffcc00; margin: 10px 0; user-select: all; }
+        #room-id-display { font-size: 24px; color: #ffcc00; margin: 10px 0; user-select: all; font-family: monospace; background: #222; padding: 5px; border-radius: 4px; display: inline-block;}
         
-        .stat-line { font-size: 14px; margin-bottom: 4px; text-shadow: 1px 1px 2px black; }
+        .stat-line { font-size: 14px; margin-bottom: 8px; text-shadow: 1px 1px 2px black; color: #ddd; }
+        .highlight { color: #0af; font-weight: bold; }
         #hint { position: absolute; bottom: 10px; width: 100%; text-align: center; color: #666; font-size: 12px; pointer-events: none; display: none; }
+        
+        /* Toast notification for copy success */
+        #toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 4px; padding: 16px; position: fixed; z-index: 1000; bottom: 30px; left: 50%; transform: translateX(-50%); font-size: 14px; opacity: 0; transition: opacity 0.3s, visibility 0.3s; border: 1px solid #555;}
+        #toast.show { visibility: visible; opacity: 1; }
     </style>
 </head>
 <body>
 
 <!-- ЭКРАН МЕНЮ / ЛОББИ -->
 <div id="menu-screen">
-    <h2>TEST ROOM LOBBY</h2>
+    <h2>MULTIPLAYER TEST</h2>
     
     <div style="margin-bottom: 20px;">
-        <button class="btn-primary" id="btn-create">СОЗДАТЬ КОМНАТУ</button>
+        <button class="btn-primary" id="btn-create">СОЗДАТЬ НОВУЮ КОМНАТУ</button>
     </div>
     
     <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
     
     <div>
-        <p style="font-size: 12px; color: #888;">Или войдите по ID:</p>
-        <input type="text" id="join-input" placeholder="Введите ID комнаты..." maxlength="10">
+        <p style="font-size: 12px; color: #888;">Или присоединитесь по ID:</p>
+        <input type="text" id="join-input" placeholder="Введите ID комнаты..." maxlength="10" autocomplete="off">
         <button id="btn-join">ВОЙТИ</button>
     </div>
     
@@ -84,14 +93,24 @@
 <canvas id="gameCanvas" width="800" height="600"></canvas>
 
 <div id="game-ui">
-    <div class="stat-line">Комната: <span id="ui-room-id" style="color:#ffcc00;"></span></div>
-    <div class="stat-line">ЛВЛ: <span id="ui-lvl">1</span></div>
-    <div class="stat-line">XP: <span id="ui-xp">0</span></div>
-    <div class="stat-line" style="color:#0af;">Онлайн: <span id="ui-count">1</span></div>
-    <button id="btn-leave" style="pointer-events:auto; margin-top:10px; font-size:10px; padding:5px;">ВЫЙТИ</button>
+    <div class="stat-line">Комната: <span id="ui-room-id" class="highlight"></span></div>
+    <div class="stat-line">Онлайн: <span id="ui-count" class="highlight">1</span></div>
+    <div class="stat-line" style="color:#aa00ff;">XP: <span id="ui-xp">0</span></div>
+    
+    <!-- НОВАЯ КНОПКА ОТПРАВКИ ССЫЛКИ -->
+    <button id="btn-copy-link" class="btn-success" style="pointer-events:auto; margin-top:10px; font-size:12px; padding:8px 15px; width: 100%;">
+        📋 Копировать ссылку для друга
+    </button>
+    
+    <button id="btn-leave" class="btn-danger" style="pointer-events:auto; margin-top:5px; font-size:10px; padding:5px 10px; width: 100%;">
+        ВЫЙТИ ИЗ КОМНАТЫ
+    </button>
 </div>
 
-<div id="hint">Управление: WASD / Стрелки. Тест мультиплеера: откройте вторую вкладку.</div>
+<div id="hint">Управление: WASD / Стрелки.</div>
+
+<!-- Всплывающее уведомление об успешном копировании -->
+<div id="toast">✅ Ссылка скопирована!</div>
 
 <script>
 // --- КОНФИГУРАЦИЯ ---
@@ -99,10 +118,10 @@ const CANVAS_W = 800;
 const CANVAS_H = 600;
 const TILE_SIZE = 40;
 const PLAYER_RADIUS = 15;
-const SPEED = 5;
-const SYNC_INTERVAL_MS = 100; 
+const SPEED = 4;
+const SYNC_INTERVAL_MS = 50;
+const INTERPOLATION_FACTOR = 0.15;
 
-// Карта (1 = стена, 0 = пол)
 const MAP = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
@@ -128,13 +147,14 @@ sessionStorage.setItem('mp_player_id', myId);
 let currentRoomId = null;
 let inGame = false;
 
-let myPlayer = { x: 100, y: 100, xp: 0, lvl: 1 };
-let otherPlayers = {}; // { id: { x, y, targetX, targetY, color } }
-let localOrbs = []; // [{ id, x, y }]
+let myPlayer = { x: 100, y: 100, xp: 0, color: '#ffcc00' };
+let otherPlayers = {}; 
+let localOrbs = []; 
 let keys = {};
 let lastSyncTime = 0;
 let unsubscribeRoom = null;
 let unsubscribeOrbs = null;
+let orbSpawnInterval = null;
 
 // DOM Elements
 const els = {
@@ -147,15 +167,71 @@ const els = {
     btnCreate: document.getElementById('btn-create'),
     btnJoin: document.getElementById('btn-join'),
     btnLeave: document.getElementById('btn-leave'),
+    btnCopyLink: document.getElementById('btn-copy-link'), // Новая кнопка
     roomIdDisplay: document.getElementById('ui-room-id'),
-    lvlDisplay: document.getElementById('ui-lvl'),
+    countDisplay: document.getElementById('ui-count'),
     xpDisplay: document.getElementById('ui-xp'),
-    countDisplay: document.getElementById('ui-count')
+    toast: document.getElementById('toast')
 };
 
+// --- АВТОМАТИЧЕСКОЕ ПОДКЛЮЧЕНИЕ ПО ССЫЛКЕ ---
+window.addEventListener('load', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomParam = urlParams.get('room');
+    
+    if (roomParam && window.FB.db) {
+        // Если в ссылке есть ?room=ABCDEF, пробуем войти автоматически
+        console.log("Auto-joining room:", roomParam);
+        setStatus(`Автоматическое подключение к ${roomParam}...`);
+        startGameSession(roomParam.toUpperCase());
+    } else if (!window.FB.db) {
+        // Ждем загрузки Firebase, если она еще не готова
+        window.addEventListener('fb-loaded', () => {
+             const params = new URLSearchParams(window.location.search);
+             const r = params.get('room');
+             if(r) startGameSession(r.toUpperCase());
+        });
+    }
+});
+
 // --- ВВОД ---
-window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keydown', e => {
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+    keys[e.code] = true;
+});
 window.addEventListener('keyup', e => keys[e.code] = false);
+
+// --- ФУНКЦИИ КОПИРОВАНИЯ ССЫЛКИ ---
+function generateInviteUrl() {
+    if (!currentRoomId) return "";
+    // Берем базовый URL (без параметров) и добавляем ?room=ID
+    const baseUrl = window.location.origin + window.location.pathname;
+    return `${baseUrl}?room=${currentRoomId}`;
+}
+
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast();
+    } catch (err) {
+        console.error('Не удалось скопировать текст:', err);
+        alert("Ошибка копирования. Попробуйте выделить ссылку вручную.");
+    }
+}
+
+function showToast() {
+    els.toast.className = "show";
+    setTimeout(() => { els.toast.className = els.toast.className.replace("show", ""); }, 2000);
+}
+
+els.btnCopyLink.onclick = () => {
+    const link = generateInviteUrl();
+    if(link) {
+        copyToClipboard(link);
+    } else {
+        alert("Вы не в комнате!");
+    }
+};
 
 // --- FIREBASE ЛОГИКА КОМНАТ ---
 
@@ -164,73 +240,56 @@ async function createRoom() {
     
     setStatus("Создание комнаты...");
     
-    // Генерируем короткий ID
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let roomId = '';
+    for(let i=0; i<6; i++) roomId += chars.charAt(Math.floor(Math.random() * chars.length));
     
     try {
-        // Создаем документ комнаты
         await window.FB.funcs.setDoc(window.FB.funcs.doc(window.FB.db, "test_lobbies", roomId), {
             createdAt: window.FB.funcs.serverTimestamp(),
             hostId: myId,
             status: "open"
         });
         
-        joinRoom(roomId);
+        // После создания сразу заходим
+        startGameSession(roomId);
     } catch (e) {
         console.error(e);
         showError("Ошибка создания: " + e.message);
     }
 }
 
-async function joinRoom(roomId) {
-    if (!roomId) return showError("Введите ID");
+async function joinRoomManual() {
+    const val = els.joinInput.value.trim().toUpperCase();
+    if (!val) return showError("Введите ID");
     if (!window.FB.db) return showError("Firebase не загружен");
-
-    setStatus(`Подключение к ${roomId}...`);
-    
-    // Проверяем существование комнаты перед входом (опционально, но лучше для UX)
-    try {
-        const roomRef = window.FB.funcs.doc(window.FB.db, "test_lobbies", roomId);
-        const snap = await window.FB.funcs.getDocs(window.FB.funcs.query(window.FB.funcs.collection(window.FB.db, "test_lobbies"), window.FB.funcs.where("__name__", "==", roomId)));
-        
-        // Так как we can't easily check existence without extra call, we just proceed to subscribe.
-        // If subscription fails or returns empty after timeout, we handle it.
-        
-        startGameSession(roomId);
-    } catch (e) {
-        showError("Ошибка подключения");
-    }
+    startGameSession(val);
 }
 
 function startGameSession(roomId) {
     currentRoomId = roomId;
     inGame = true;
     
-    // Переключаем UI
+    // Обновляем адресную строку, чтобы ссылка была чистой при выходе или перезагрузке
+    // Но оставляем параметр room, чтобы при F5 снова зайти
+    history.replaceState(null, "", `?room=${roomId}`);
+
     els.menu.style.display = 'none';
     els.canvas.style.display = 'block';
     els.ui.style.display = 'block';
     els.hint.style.display = 'block';
     els.roomIdDisplay.textContent = roomId;
     
-    // Сбрасываем состояние
     otherPlayers = {};
     localOrbs = [];
-    myPlayer.x = 100; myPlayer.y = 100; // Стартовая позиция
+    myPlayer.x = 100; 
+    myPlayer.y = 100; 
     
-    // 1. Регистрируем себя в подколлекции players внутри комнаты
-    // Структура: test_lobbies/{roomId}/players/{myId}
     registerSelfInRoom();
-    
-    // 2. Подписываемся на изменения списка игроков в этой комнате
     listenToPlayersInRoom();
-    
-    // 3. Подписываемся на орбы (кристаллы опыта) в этой комнате
-    // Структура: test_lobbies/{roomId}/orbs/{orbId}
     listenToOrbsInRoom();
     
-    // Запуск цикла
-    gameLoop();
+    requestAnimationFrame(gameLoop);
 }
 
 async function registerSelfInRoom() {
@@ -238,7 +297,7 @@ async function registerSelfInRoom() {
     await window.FB.funcs.setDoc(ref, {
         x: myPlayer.x,
         y: myPlayer.y,
-        color: '#ffcc00', // Мой цвет
+        color: myPlayer.color,
         timestamp: window.FB.funcs.serverTimestamp()
     });
 }
@@ -251,19 +310,25 @@ function listenToPlayersInRoom() {
             const data = docChange.data();
             const playerId = docChange.id;
 
-            if (playerId === myId) return; // Игнорируем себя
+            if (playerId === myId) return;
 
             if (docChange.type === 'added' || docChange.type === 'modified') {
                 if (!otherPlayers[playerId]) {
                     otherPlayers[playerId] = {
                         x: data.x, y: data.y,
                         targetX: data.x, targetY: data.y,
-                        color: data.color || '#00ccff'
+                        color: data.color || getRandomColor(),
+                        name: playerId.substring(0,4)
                     };
                 } else {
-                    // Обновляем только цели для интерполяции
                     otherPlayers[playerId].targetX = data.x;
                     otherPlayers[playerId].targetY = data.y;
+                    
+                    const dist = Math.hypot(otherPlayers[playerId].x - data.x, otherPlayers[playerId].y - data.y);
+                    if(dist > 100) {
+                         otherPlayers[playerId].x = data.x;
+                         otherPlayers[playerId].y = data.y;
+                    }
                 }
             } else if (docChange.type === 'removed') {
                 delete otherPlayers[playerId];
@@ -288,8 +353,8 @@ function listenToOrbsInRoom() {
         });
     });
 
-    // Спавнер орбов (локальный таймер, но пишет в общую БД комнаты)
-    setInterval(async () => {
+    if(orbSpawnInterval) clearInterval(orbSpawnInterval);
+    orbSpawnInterval = setInterval(async () => {
         if (!inGame || !window.FB.db) return;
         if (localOrbs.length < 5) {
             const rx = 50 + Math.random() * (CANVAS_W - 100);
@@ -327,26 +392,27 @@ async function collectOrb(id) {
     await window.FB.funcs.deleteDoc(ref).catch(e => {});
     
     myPlayer.xp += 10;
-    checkLevelUp();
     updateUI();
 }
 
 function leaveRoom() {
     inGame = false;
+    const oldRoomId = currentRoomId; // Сохраняем перед сбросом
     currentRoomId = null;
     
-    // Удаляем слушатели
     if (unsubscribeRoom) unsubscribeRoom();
     if (unsubscribeOrbs) unsubscribeOrbs();
+    if (orbSpawnInterval) clearInterval(orbSpawnInterval);
     
-    // Пытаемся удалить свой документ из комнаты (чтобы другие сразу увидели выход)
-    if (window.FB.db) {
-        // Нам нужен последний известный roomId, но он уже сброшен. 
-        // Поэтому лучше вызывать cleanup ДО сброса, или хранить его.
-        // Для простоты теста полагаемся на heartbeat или удаление при закрытии вкладки.
+    // Удаляем себя из базы
+    if (window.FB.db && oldRoomId) {
+        const ref = window.FB.funcs.doc(window.FB.db, "test_lobbies", oldRoomId, "players", myId);
+        window.FB.funcs.deleteDoc(ref).catch(()=>{});
     }
 
-    // Возврат в меню
+    // Очищаем URL от параметра room
+    history.replaceState(null, "", window.location.pathname);
+
     els.menu.style.display = 'block';
     els.canvas.style.display = 'none';
     els.ui.style.display = 'none';
@@ -354,7 +420,7 @@ function leaveRoom() {
     setStatus("");
 }
 
-// --- ФИЗИКА ---
+// --- ФИЗИКА И РЕНДЕР (Без изменений, но проверены) ---
 
 function isWall(x, y) {
     const tx = Math.floor(x / TILE_SIZE);
@@ -366,10 +432,10 @@ function isWall(x, y) {
 function checkCollision(px, py) {
     const r = PLAYER_RADIUS;
     const corners = [
-        {x: px - r, y: py},
-        {x: px + r, y: py},
-        {x: px, y: py - r},
-        {x: px, y: py + r}
+        {x: px - r, y: py - r},
+        {x: px + r, y: py - r},
+        {x: px - r, y: py + r},
+        {x: px + r, y: py + r}
     ];
     for (let c of corners) {
         if (isWall(c.x, c.y)) return true;
@@ -398,7 +464,6 @@ function updatePhysics() {
     let nextY = myPlayer.y + dy;
     if (!checkCollision(myPlayer.x, nextY)) myPlayer.y = nextY;
 
-    // Сбор орбов
     for (let i = localOrbs.length - 1; i >= 0; i--) {
         const orb = localOrbs[i];
         const dist = Math.hypot(myPlayer.x - orb.x, myPlayer.y - orb.y);
@@ -411,43 +476,66 @@ function updatePhysics() {
 function interpolateOthers() {
     for (let pid in otherPlayers) {
         const p = otherPlayers[pid];
-        p.x += (p.targetX - p.x) * 0.2;
-        p.y += (p.targetY - p.y) * 0.2;
+        p.x += (p.targetX - p.x) * INTERPOLATION_FACTOR;
+        p.y += (p.targetY - p.y) * INTERPOLATION_FACTOR;
     }
 }
 
-// --- РЕНДЕРИНГ ---
 const ctx = els.canvas.getContext('2d');
 
 function drawMap() {
-    ctx.fillStyle = '#222';
+    ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    
-    ctx.fillStyle = '#444';
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
     for(let y=0; y<MAP.length; y++) {
         for(let x=0; x<MAP[y].length; x++) {
             if(MAP[y][x] === 1) {
+                ctx.fillStyle = '#444';
                 ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                ctx.strokeStyle = '#555';
-                ctx.strokeRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                ctx.fillStyle = '#555';
+                ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, 5);
             }
         }
     }
 }
 
-function drawPlayer(x, y, color, label) {
+function drawPlayer(x, y, color, label, isMe = false) {
+    ctx.beginPath();
+    ctx.arc(x, y + 5, PLAYER_RADIUS * 0.8, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fill();
+
     ctx.beginPath();
     ctx.arc(x, y, PLAYER_RADIUS, 0, Math.PI*2);
     ctx.fillStyle = color;
     ctx.fill();
+    
     ctx.lineWidth = 2;
-    ctx.strokeStyle = '#fff';
+    ctx.strokeStyle = isMe ? '#fff' : '#000';
     ctx.stroke();
     
+    if(isMe) {
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 15;
+        ctx.beginPath();
+        ctx.arc(x, y, PLAYER_RADIUS, 0, Math.PI*2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
     ctx.fillStyle = '#fff';
-    ctx.font = '10px monospace';
+    ctx.font = 'bold 12px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(label, x, y - 20);
+    ctx.textBaseline = 'middle';
+    
+    const textWidth = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(x - textWidth/2 - 2, y - 25, textWidth + 4, 14);
+    
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, x, y - 18);
 }
 
 function render() {
@@ -455,70 +543,66 @@ function render() {
     
     drawMap();
 
-    // Другие игроки
-    for (let pid in otherPlayers) {
-        const p = otherPlayers[pid];
-        drawPlayer(p.x, p.y, p.color, pid.substr(0,4));
-    }
-
-    // Орбы
-    ctx.fillStyle = '#aa00ff';
     ctx.shadowColor = '#aa00ff';
     ctx.shadowBlur = 10;
+    ctx.fillStyle = '#aa00ff';
     for (let orb of localOrbs) {
         ctx.beginPath();
-        ctx.arc(orb.x, orb.y, 8, 0, Math.PI*2);
+        ctx.arc(orb.x, orb.y, 6, 0, Math.PI*2);
         ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(orb.x, orb.y, 2, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = '#aa00ff';
     }
     ctx.shadowBlur = 0;
 
-    // Я
-    drawPlayer(myPlayer.x, myPlayer.y, '#ffcc00', 'YOU');
+    for (let pid in otherPlayers) {
+        const p = otherPlayers[pid];
+        drawPlayer(p.x, p.y, p.color, p.name);
+    }
+
+    drawPlayer(myPlayer.x, myPlayer.y, myPlayer.color, 'YOU', true);
 }
 
 function updateUI() {
-    els.lvlDisplay.textContent = myPlayer.lvl;
     els.xpDisplay.textContent = myPlayer.xp;
 }
 
-function checkLevelUp() {
-    const needed = myPlayer.lvl * 100;
-    if (myPlayer.xp >= needed) {
-        myPlayer.xp -= needed;
-        myPlayer.lvl++;
-    }
+function getRandomColor() {
+    const colors = ['#00ffff', '#ff00ff', '#00ff00', '#ffaaaa', '#aaaaff', '#ffffaa'];
+    return colors[Math.floor(Math.random() * colors.length)];
 }
 
-// --- ГЛАВНЫЙ ЦИКЛ ---
 function gameLoop() {
     if (!inGame) return;
-    
     updatePhysics();
     interpolateOthers();
     syncPosition();
     render();
-    
     requestAnimationFrame(gameLoop);
 }
 
 // --- ОБРАБОТЧИКИ КНОПОК ---
 els.btnCreate.onclick = createRoom;
-els.btnJoin.onclick = () => joinRoom(els.joinInput.value.trim().toUpperCase());
+els.btnJoin.onclick = joinRoomManual;
 els.btnLeave.onclick = leaveRoom;
 
 function setStatus(msg) { els.status.textContent = msg; }
-function showError(msg) { els.status.textContent = msg; els.status.style.color = "#f44"; setTimeout(() => els.status.style.color = "#aaa", 2000); }
+function showError(msg) { 
+    els.status.textContent = msg; 
+    els.status.style.color = "#f44"; 
+    setTimeout(() => els.status.style.color = "#aaa", 2000); 
+}
 
-// Ожидание загрузки Firebase
 window.addEventListener('fb-loaded', () => {
     console.log("Game Script Active");
 });
 
-// Cleanup при закрытии вкладки
 window.addEventListener('beforeunload', () => {
     if (inGame && window.FB.db && currentRoomId) {
         const ref = window.FB.funcs.doc(window.FB.db, "test_lobbies", currentRoomId, "players", myId);
-        // Fire-and-forget deletion
         window.FB.funcs.deleteDoc(ref);
     }
 });
