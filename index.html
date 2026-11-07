@@ -192,7 +192,6 @@ els.nicknameInput.addEventListener('change', (e) => {
 
 // --- АВТОМАТИЧЕСКОЕ ПОДКЛЮЧЕНИЕ ПО ССЫЛКЕ ---
 window.addEventListener('load', () => {
-    // Ждем немного, пока модуль импорта выполнится
     setTimeout(() => {
         if (!window.FB || !window.FB.db) {
             setStatus("⚠️ Ошибка: Firebase не загружен. Проверьте интернет.");
@@ -261,7 +260,6 @@ async function createRoom() {
     for(let i=0; i<6; i++) roomId += chars.charAt(Math.floor(Math.random() * chars.length));
     
     try {
-        // Пытаемся создать документ
         await window.FB.funcs.setDoc(window.FB.funcs.doc(window.FB.db, "test_lobbies", roomId), {
             createdAt: window.FB.funcs.serverTimestamp(),
             hostId: myId,
@@ -271,11 +269,10 @@ async function createRoom() {
         startGameSession(roomId);
     } catch (e) {
         console.error(e);
-        // Детальная отладка ошибки прав доступа
         if (e.code === 'permission-denied') {
             showError("❌ ДОСТУП ЗАПРЕЩЕН! Измените Firestore Rules в консоли Firebase.");
         } else {
-            showError("Ошибка: " + e.message);
+            showError("Ошибка создания: " + e.message);
         }
     }
 }
@@ -291,18 +288,8 @@ async function joinRoomManual() {
 
     setStatus("Проверка комнаты...");
     
-    // Сначала проверяем, существует ли комната (чтобы дать понятную ошибку)
-    try {
-        const roomRef = window.FB.funcs.doc(window.FB.db, "test_lobbies", val);
-        const snap = await window.FB.funcs.getDocs(query(collection(window.FB.db, "test_lobbies"), where("__name__", "==", val)));
-        // Проще проверить через onSnapshot или getDoc, но здесь используем прямую проверку существования через попытку чтения
-        
-        // Для простоты сразу пытаемся войти. Если комнаты нет, слушатель игроков вернет пусто, но создание игрока упадет с ошибкой.
-        startGameSession(val);
-        
-    } catch (e) {
-         showError("Ошибка входа: " + e.message);
-    }
+    // Просто пробуем войти. Если комнаты нет или прав нет, registerSelfInRoom выбросит ошибку.
+    startGameSession(val);
 }
 
 function startGameSession(roomId) {
@@ -341,9 +328,13 @@ async function registerSelfInRoom() {
         });
     } catch (e) {
         console.error("Register error:", e);
+        leaveRoom(); // Возвращаемся в меню при ошибке
         if (e.code === 'permission-denied') {
-            leaveRoom();
             showError("❌ НЕЛЬЗЯ ВОЙТИ: Права доступа заблокированы. Исправьте Rules.");
+        } else if (e.code === 'unavailable') {
+             showError("❌ Сервис недоступен. Попробуйте позже.");
+        } else {
+            showError("Ошибка входа: " + e.message);
         }
     }
 }
