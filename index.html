@@ -3,14 +3,206 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Working Movement Test</title>
+    <title>Шахматы Онлайн | Firestore</title>
     
-    <!-- Firebase SDK -->
+    <!-- Библиотека chess.js для правил игры -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a2e;
+            color: #eee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        /* Экран меню */
+        #menu-screen {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        input {
+            padding: 10px;
+            margin: 10px 0;
+            width: 80%;
+            border-radius: 5px;
+            border: none;
+            font-size: 16px;
+            background: #2c2c2c;
+            color: white;
+        }
+
+        button {
+            padding: 12px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.1s, opacity 0.2s;
+            font-size: 1rem;
+        }
+
+        button:hover { transform: scale(1.05); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        
+        .btn-create { background-color: #4CAF50; color: white; }
+        .btn-join { background-color: #2196F3; color: white; }
+        .btn-reset { background-color: #f44336; color: white; margin-top: 20px; }
+
+        /* Игровой экран */
+        #game-screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header-info {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+
+        .status-bar {
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            min-width: 300px;
+            text-align: center;
+            border: 1px solid #444;
+            transition: background-color 0.3s;
+        }
+
+        /* Шахматная доска */
+        #board-container {
+            position: relative;
+        }
+
+        #board {
+            width: 400px;
+            height: 400px;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            border: 5px solid #34495e;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            user-select: none;
+            background-color: #34495e;
+        }
+
+        .square {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3rem; 
+            cursor: pointer;
+            position: relative;
+        }
+
+        .white-square { background-color: #eeeed2; color: black; }
+        .black-square { background-color: #769656; color: black; }
+
+        .selected { background-color: #f7ec7d !important; }
+        
+        /* Индикатор возможного хода */
+        .valid-move::after {
+            content: '';
+            position: absolute;
+            width: 25%;
+            height: 25%;
+            background-color: rgba(0, 0, 0, 0.4);
+            border-radius: 50%;
+            z-index: 10;
+        }
+        
+        /* Индикатор взятия фигуры */
+        .valid-capture::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 4px solid rgba(255, 0, 0, 0.5);
+            box-sizing: border-box;
+            border-radius: 50%;
+            z-index: 5;
+        }
+
+        .piece-w { color: #fff; text-shadow: 0 0 2px #000; }
+        .piece-b { color: #000; }
+
+        @media (max-width: 500px) {
+            #board { width: 90vw; height: 90vw; }
+            .square { font-size: 10vw; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ЭКРАН МЕНЮ -->
+    <div id="menu-screen">
+        <h2>♟️ Шахматы Онлайн</h2>
+        <p style="color:#aaa; font-size:0.9rem;">Firebase Firestore Edition</p>
+        
+        <button class="btn-create" onclick="createRoom()">Создать новую игру</button>
+        
+        <hr style="border-color: #444; margin: 20px 0;">
+        
+        <input type="text" id="join-code-input" placeholder="Введите код комнаты..." maxlength="6">
+        <button class="btn-join" onclick="joinRoom()">Присоединиться</button>
+        
+        <div id="network-status" style="margin-top:10px; font-size:0.8rem; color:#666;"></div>
+    </div>
+
+    <!-- ИГРОВОЙ ЭКРАН -->
+    <div id="game-screen">
+        <div class="header-info">
+            <span>Комната: <strong id="display-room-id">...</strong></span>
+            <span>Вы играете за: <strong id="my-color-display">...</strong></span>
+        </div>
+        
+        <div class="status-bar" id="game-status">Загрузка...</div>
+        
+        <div id="board-container">
+            <div id="board"></div>
+        </div>
+
+        <button class="btn-reset" onclick="leaveGame()">Покинуть игру</button>
+    </div>
+
+    <!-- Firebase Logic (ES Modules) -->
     <script type="module">
+        // 1. Импорт правильных версий SDK (v10.12.0 - стабильная)
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { 
-            getFirestore, collection, addDoc, doc, updateDoc, deleteDoc,
-            onSnapshot, query, where, limit, serverTimestamp, runTransaction, getDocs
+            getFirestore, 
+            collection, 
+            doc, 
+            setDoc, 
+            updateDoc, 
+            onSnapshot, 
+            query, 
+            where, 
+            limit, 
+            serverTimestamp,
+            runTransaction,
+            getDocs
         } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
         // Твой конфиг
@@ -28,228 +220,339 @@
         try {
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
-            console.log("✅ Firebase Ready");
+            document.getElementById('network-status').textContent = "✅ Connected to Firestore";
         } catch (e) {
-            console.error("❌ Error:", e);
+            console.error("❌ Firebase Error:", e);
+            document.getElementById('network-status').textContent = "❌ Connection Failed";
         }
 
-        class WorkingGame {
-            constructor() {
-                this.db = db;
-                this.playerId = crypto.randomUUID();
-                this.roomId = null;
-                
-                // Состояние игры
-                this.gameActive = false;
-                this.remotePlayers = []; 
-                
-                // Моя позиция (мировая)
-                this.myX = 0;
-                this.myY = 0;
-                
-                // Камера
-                this.camX = 0;
-                this.camY = 0;
+        // Глобальные переменные
+        let currentRoomId = null;
+        let myColor = null; // 'w' или 'b'
+        let game = new Chess();
+        let selectedSquare = null;
+        let validMoves = [];
+        let unsubscribeListener = null;
+        let tempUserId = sessionStorage.getItem('userId') || ('u_' + Math.random().toString(36).substr(2, 9));
+        sessionStorage.setItem('userId', tempUserId);
 
-                // Canvas
-                this.canvas = document.getElementById('game-canvas');
-                this.ctx = this.canvas.getContext('2d');
-                
-                // Input State
-                this.keysPressed = {};
-                
-                // Параметры движения
-                this.moveSpeed = 10; // Высокая скорость для теста
-                
-                // Network Throttle
-                this.lastSendTime = 0;
-                this.sendInterval = 50;
+        // DOM Elements
+        const menuScreen = document.getElementById('menu-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const boardEl = document.getElementById('board');
+        const statusEl = document.getElementById('game-status');
+        const roomIdDisplay = document.getElementById('display-room-id');
+        const myColorDisplay = document.getElementById('my-color-display');
+        const joinInput = document.getElementById('join-code-input');
 
-                this.initInput();
-                this.resize();
-                window.addEventListener('resize', () => this.resize());
+        // --- ФУНКЦИИ УПРАВЛЕНИЯ КОМНАТАМИ (FIRESTORE) ---
+
+        window.createRoom = async () => {
+            if (!db) return alert("Нет соединения с базой");
+            
+            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const roomRef = doc(db, "rooms", code);
+            
+            try {
+                // Создаем комнату со стартовой позицией
+                await setDoc(roomRef, {
+                    fen: game.fen(), // Стартовая позиция FEN
+                    turn: 'w',       // Ход белых
+                    players: {
+                        w: tempUserId, // Первый создавший становится белым
+                        b: null        // Черные пока не заняты
+                    },
+                    createdAt: serverTimestamp()
+                });
+
+                console.log("Комната создана:", code);
+                enterGame(code, 'w');
+
+            } catch (error) {
+                console.error("Ошибка создания комнаты:", error);
+                alert("Не удалось создать комнату. Проверьте консоль.");
+            }
+        };
+
+        window.joinRoom = async () => {
+            const code = joinInput.value.trim().toUpperCase();
+            if (!code) {
+                alert("Введите код комнаты");
+                return;
             }
 
-            resize() {
-                const dpr = window.devicePixelRatio || 1;
-                this.canvas.width = window.innerWidth * dpr;
-                this.canvas.height = window.innerHeight * dpr;
-                this.ctx.scale(dpr, dpr);
-                this.w = window.innerWidth;
-                this.h = window.innerHeight;
-            }
-
-            initInput() {
-                // Ключевое исправление: Слушаем глобально и блокируем скролл
-                window.addEventListener('keydown', (e) => {
-                    // Блокируем стандартное поведение стрелок и пробела
-                    if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(e.code)) {
-                        e.preventDefault();
+            try {
+                const roomRef = doc(db, "rooms", code);
+                
+                // Используем транзакцию для безопасного занятия места
+                await runTransaction(db, async (transaction) => {
+                    const snapshot = await transaction.get(roomRef);
+                    
+                    if (!snapshot.exists()) {
+                        throw new Error("Комната не найдена!");
                     }
                     
-                    // Запоминаем нажатие по коду клавиши (не зависит от языка!)
-                    this.keysPressed[e.code] = true;
+                    const data = snapshot.data();
                     
-                    // Для дебага
-                    if(!this.gameActive) console.log("Key pressed:", e.code);
-                });
-
-                window.addEventListener('keyup', (e) => {
-                    this.keysPressed[e.code] = false;
-                });
-                
-                // Фокус на окно при клике, чтобы гарантировать получение событий
-                window.addEventListener('click', () => {
-                    if(this.gameActive) {
-                         this.canvas.focus();
-                    }
-                });
-            }
-
-            async joinOrCreate() {
-                document.getElementById('ui').style.display = 'none';
-                
-                // Фокусируемся на канвасе сразу после старта
-                setTimeout(() => this.canvas.focus(), 100);
-
-                try {
-                    const q = query(collection(this.db, "rooms"), where("count", "<", 4), limit(1));
-                    const snapshot = await getDocs(q);
-
-                    if (!snapshot.empty) {
-                        const roomDoc = snapshot.docs[0];
-                        this.roomId = roomDoc.id;
-                        await this.joinRoom(roomDoc.data().players);
-                    } else {
-                        const newPlayer = { id: this.playerId, x: 0, y: 0 };
-                        const docRef = await addDoc(collection(this.db, "rooms"), {
-                            players: [newPlayer],
-                            count: 1,
-                            createdAt: serverTimestamp()
+                    // Логика определения цвета
+                    if (data.players.w === tempUserId) {
+                        // Мы уже белые? Тогда просто заходим
+                        myColor = 'w';
+                    } else if (data.players.b === tempUserId) {
+                        // Мы уже черные?
+                        myColor = 'b';
+                    } else if (!data.players.b) {
+                        // Слот черных пуст -> занимаем его
+                        myColor = 'b';
+                        transaction.update(roomRef, {
+                            'players.b': tempUserId
                         });
-                        this.roomId = docRef.id;
-                        this.startListening();
+                    } else {
+                        // Оба слота заняты другими людьми
+                        throw new Error("Игра уже полна! Два других человека играют в эту партию.");
                     }
-                } catch (err) {
-                    alert("Ошибка сети: " + err.message);
-                    location.reload();
+                });
+
+                enterGame(code, myColor);
+
+            } catch (error) {
+                console.error("Ошибка подключения:", error);
+                alert(error.message || "Не удалось подключиться к комнате.");
+            }
+        };
+
+        function enterGame(code, color) {
+            currentRoomId = code;
+            myColor = color;
+            
+            // Переключаем интерфейс
+            menuScreen.style.display = 'none';
+            gameScreen.style.display = 'flex';
+            
+            roomIdDisplay.textContent = code;
+            myColorDisplay.textContent = color === 'w' ? 'Белые ♔' : 'Черные ♚';
+            myColorDisplay.style.color = color === 'w' ? '#fff' : '#ccc';
+
+            // Загружаем текущее состояние из базы и подписываемся на изменения
+            loadGameStateFromDB();
+        }
+
+        window.leaveGame = () => {
+            if (unsubscribeListener) {
+                unsubscribeListener(); // Отписываемся от изменений
+            }
+            currentRoomId = null;
+            myColor = null;
+            game.reset();
+            selectedSquare = null;
+            validMoves = [];
+            
+            gameScreen.style.display = 'none';
+            menuScreen.style.display = 'block';
+            joinInput.value = '';
+        };
+
+        // --- ЛОГИКА СИНХРОНИЗАЦИИ (REALTIME LISTENER) ---
+
+        function loadGameStateFromDB() {
+            const roomRef = doc(db, "rooms", currentRoomId);
+            
+            // Слушаем изменения в реальном времени
+            unsubscribeListener = onSnapshot(roomRef, (docSnap) => {
+                if (!docSnap.exists()) {
+                    alert("Комната удалена");
+                    leaveGame();
+                    return;
+                }
+
+                const data = docSnap.data();
+                
+                // Обновляем локальную модель шахмат только если FEN изменился
+                // Это предотвращает лишние перерисовки
+                if (game.fen() !== data.fen) {
+                    game.load(data.fen);
+                }
+                
+                renderBoard();
+                updateStatusText();
+            }, (error) => {
+                console.error("Firestore Listener Error:", error);
+                statusEl.textContent = "Ошибка соединения с сервером.";
+            });
+        }
+
+        // --- ОТРИСОВКА И ИНТЕРАКТИВ ---
+
+        function renderBoard() {
+            boardEl.innerHTML = '';
+            const boardState = game.board();
+
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const squareDiv = document.createElement('div');
+                    squareDiv.classList.add('square');
+                    
+                    // Цвет клетки
+                    if ((row + col) % 2 === 0) {
+                        squareDiv.classList.add('white-square');
+                    } else {
+                        squareDiv.classList.add('black-square');
+                    }
+
+                    const piece = boardState[row][col];
+                    if (piece) {
+                        const span = document.createElement('span');
+                        span.textContent = getPieceSymbol(piece.type, piece.color);
+                        span.className = piece.color === 'w' ? 'piece-w' : 'piece-b';
+                        squareDiv.appendChild(span);
+                    }
+
+                    const file = String.fromCharCode(97 + col);
+                    const rank = 8 - row;
+                    const notation = file + rank;
+                    squareDiv.dataset.square = notation;
+
+                    // Подсветка выбранной клетки
+                    if (selectedSquare === notation) {
+                        squareDiv.classList.add('selected');
+                    }
+
+                    // Подсветка возможных ходов
+                    if (validMoves.includes(notation)) {
+                        if (piece && piece.color !== myColor) {
+                            squareDiv.classList.add('valid-capture');
+                        } else {
+                            squareDiv.classList.add('valid-move');
+                        }
+                    }
+
+                    // Обработчик клика
+                    squareDiv.addEventListener('click', () => handleSquareClick(notation));
+                    
+                    boardEl.appendChild(squareDiv);
+                }
+            }
+        }
+
+        function getPieceSymbol(type, color) {
+            const symbols = {
+                k: color === 'w' ? '♔' : '♚',
+                q: color === 'w' ? '♕' : '♛',
+                r: color === 'w' ? '♖' : '♜',
+                b: color === 'w' ? '♗' : '♝',
+                n: color === 'w' ? '♘' : '♞',
+                p: color === 'w' ? '♙' : '♟'
+            };
+            return symbols[type] || '';
+        }
+
+        function handleSquareClick(square) {
+            // 1. Проверка: моя ли очередь?
+            if (game.turn() !== myColor) {
+                return; // Игнорируем клик, если не наш ход
+            }
+
+            // 2. Если игра окончена
+            if (game.game_over()) {
+                return;
+            }
+
+            // 3. Логика выбора и хода
+            if (selectedSquare) {
+                // Пытаемся сделать ход из выбранной клетки в clicked
+                const moveObj = {
+                    from: selectedSquare,
+                    to: square,
+                    promotion: 'q' // Автопревращение в ферзя
+                };
+
+                const result = game.move(moveObj);
+
+                if (result) {
+                    // Ход легален
+                    selectedSquare = null;
+                    validMoves = [];
+                    
+                    // СОХРАНЯЕМ В FIREBASE
+                    saveMoveToFirebase();
+                    
+                    renderBoard(); // Перерисуем сразу для отзывчивости
+                    updateStatusText();
+                    return;
                 }
             }
 
-            async joinRoom(currentPlayers) {
-                await runTransaction(this.db, async (transaction) => {
-                    const ref = doc(this.db, "rooms", this.roomId);
-                    const snap = await transaction.get(ref);
-                    if (!snap.exists()) throw new Error("Комната исчезла");
-                    
-                    const data = snap.data();
-                    if (data.count >= 4) throw new Error("Комната полна");
-
-                    const offset = Math.random() * 100 - 50;
-                    const newMe = { id: this.playerId, x: offset, y: offset };
-                    
-                    transaction.update(ref, {
-                        players: [...data.players, newMe],
-                        count: data.players.length + 1
-                    });
-                });
-                
-                this.startListening();
+            // 4. Выбор новой фигуры
+            const piece = game.get(square);
+            if (piece && piece.color === myColor) {
+                selectedSquare = square;
+                const moves = game.moves({ square: square, verbose: true });
+                validMoves = moves.map(m => m.to);
+            } else {
+                selectedSquare = null;
+                validMoves = [];
             }
+            
+            renderBoard();
+        }
 
-            startListening() {
-                this.gameActive = true;
-                this.canvas.style.display = 'block';
-                
-                onSnapshot(doc(this.db, "rooms", this.roomId), (docSnap) => {
-                    if (!docSnap.exists()) return;
-                    this.remotePlayers = docSnap.data().players;
-                }, (err) => {
-                    console.error(err);
-                });
-                
-                this.loop();
-            }
+        function saveMoveToFirebase() {
+            if (!currentRoomId || !db) return;
 
-            loop() {
-                if (!this.gameActive) return;
+            const roomRef = doc(db, "rooms", currentRoomId);
+            
+            // Обновляем FEN и Turn
+            updateDoc(roomRef, {
+                fen: game.fen(),
+                turn: game.turn(),
+                lastMoveTime: serverTimestamp()
+            }).catch(err => {
+                console.error("Ошибка сохранения хода:", err);
+                alert("Не удалось отправить ход. Проверьте соединение.");
+            });
+        }
 
-                // 1. ЛОГИКА ДВИЖЕНИЯ (САМАЯ ПРОСТАЯ И НАДЕЖНАЯ)
-                let dx = 0;
-                let dy = 0;
-
-                // Проверяем конкретные коды клавиш
-                if (this.keysPressed['KeyW'] || this.keysPressed['ArrowUp']) dy -= 1;
-                if (this.keysPressed['KeyS'] || this.keysPressed['ArrowDown']) dy += 1;
-                if (this.keysPressed['KeyA'] || this.keysPressed['ArrowLeft']) dx -= 1;
-                if (this.keysPressed['KeyD'] || this.keysPressed['ArrowRight']) dx += 1;
-
-                // Если есть движение
-                if (dx !== 0 || dy !== 0) {
-                    // Нормализуем диагональ, чтобы не бегать быстрее по углам
-                    const length = Math.sqrt(dx*dx + dy*dy);
-                    dx /= length;
-                    dy /= length;
-
-                    // Обновляем мировую позицию
-                    this.myX += dx * this.moveSpeed;
-                    this.myY += dy * this.moveSpeed;
-                    
-                    // Отправляем в базу
-                    const now = Date.now();
-                    if (now - this.lastSendTime > this.sendInterval) {
-                        this.updateMyPos(this.myX, this.myY);
-                        this.lastSendTime = now;
-                    }
+        function updateStatusText() {
+            let text = "";
+            const turnName = game.turn() === 'w' ? 'Белые' : 'Черные';
+            
+            if (game.in_checkmate()) {
+                const winner = game.turn() === 'w' ? 'Черные' : 'Белые';
+                text = `МАТ! Победили ${winner}.`;
+            } else if (game.in_draw()) {
+                text = "Ничья!";
+            } else if (game.in_stalemate()) {
+                text = "Пат! Ничья.";
+            } else if (game.in_threefold_repetition()) {
+                text = "Ничья (повторение позиций).";
+            } else {
+                text = `Ходят: ${turnName}`;
+                if (game.in_check()) {
+                    text += " ⚠️ ШАХ!";
                 }
+                
+                // Подсказка пользователю
+                if (game.turn() !== myColor) {
+                    text += " (Ждем соперника...)";
+                }
+            }
+            
+            statusEl.textContent = text;
+            
+            // Меняем фон статуса в зависимости от ситуации
+            if (game.in_checkmate() || game.in_draw()) {
+                statusEl.style.backgroundColor = "#e74c3c";
+            } else if (game.in_check()) {
+                statusEl.style.backgroundColor = "#f39c12";
+            } else {
+                statusEl.style.backgroundColor = "rgba(0,0,0,0.5)";
+            }
+        }
 
-                // 2. КАМЕРА
-                // Плавно следуем за собой
-                this.camX += (this.myX - this.camX) * 0.1;
-                this.camY += (this.myY - this.camY) * 0.1;
+        // Инициализация пустой доски при загрузке страницы (для превью)
+        renderBoard();
+        updateStatusText();
 
-                // 3. РЕНДЕР
-                const ctx = this.ctx;
-                const w = this.w;
-                const h = this.h;
-
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, w, h);
-
-                const screenCenterX = w / 2;
-                const screenCenterY = h / 2;
-
-                const worldToScreen = (wx, wy) => ({
-                    x: wx - this.camX + screenCenterX,
-                    y: wy - this.camY + screenCenterY
-                });
-
-                // Сетка
-                this.drawGrid(ctx, worldToScreen);
-
-                // Центр мира
-                this.drawCenterCross(ctx, worldToScreen);
-
-                // Другие игроки
-                this.remotePlayers.forEach(p => {
-                    if (p.id === this.playerId) return;
-                    const pos = worldToScreen(p.x, p.y);
-                    if (pos.x > -50 && pos.x < w + 50 && pos.y > -50 && pos.y < h + 50) {
-                        ctx.beginPath();
-                        ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
-                        ctx.fillStyle = '#ff4444';
-                        ctx.fill();
-                    }
-                });
-
-                // Я
-                const myPos = worldToScreen(this.myX, this.myY);
-                ctx.beginPath();
-                ctx.arc(myPos.x, myPos.y, 12, 0, Math.PI * 2);
-                ctx.fillStyle = '#fff';
-                ctx.shadowColor = '#fff';
-                ctx.shadowBlur = 10;
-                ctx.fill();
-                ctx.shadowBlur = 0;
-
-                requestAnimationFrame(() => this
+    </script>
+</body>
+</html>
