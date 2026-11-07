@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auto-Match Game</title>
+    <title>Fixed Movement - Infinite World</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -34,73 +33,83 @@
             console.error("❌ Error:", e);
         }
 
-        class GameEngine {
+        class FixedGame {
             constructor() {
                 this.db = db;
                 this.playerId = crypto.randomUUID();
                 this.roomId = null;
-                this.isHost = false;
-                this.players = [];
-                this.gameStarted = false;
-                this.unsub = null;
                 
-                // Игровые переменные
+                // Состояние игры
+                this.gameActive = false;
+                this.remotePlayers = []; // Данные из базы
+                
+                // Локальное состояние моего игрока (для плавного движения без лагов сети)
+                this.myLocalPos = { x: 0, y: 0 };
+                this.myVelocity = { x: 0, y: 0 };
+                
+                // Камера
+                this.camX = 0;
+                this.camY = 0;
+
+                // Canvas
                 this.canvas = document.getElementById('game-canvas');
                 this.ctx = this.canvas.getContext('2d');
+                
+                // Input
                 this.keys = {};
+                this.speed = 8; // Скорость движения
+                
+                // Network Throttle
                 this.lastSendTime = 0;
-                this.loopId = null;
+                this.sendInterval = 30; // Отправлять каждые 30мс для большей плавности
 
                 this.initInput();
-                this.resizeCanvas();
-                window.addEventListener('resize', () => this.resizeCanvas());
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
             }
 
-            resizeCanvas() {
+            resize() {
                 const dpr = window.devicePixelRatio || 1;
-                const rect = this.canvas.getBoundingClientRect();
-                this.canvas.width = rect.width * dpr;
-                this.canvas.height = rect.height * dpr;
+                this.canvas.width = window.innerWidth * dpr;
+                this.canvas.height = window.innerHeight * dpr;
                 this.ctx.scale(dpr, dpr);
-                this.w = rect.width;
-                this.h = rect.height;
+                this.w = window.innerWidth;
+                this.h = window.innerHeight;
             }
 
             initInput() {
-                window.addEventListener('keydown', e => this.keys[e.key.toLowerCase()] = true);
-                window.addEventListener('keyup', e => this.keys[e.key.toLowerCase()] = false);
+                window.addEventListener('keydown', (e) => {
+                    this.keys[e.key.toLowerCase()] = true;
+                    if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault();
+                });
+                window.addEventListener('keyup', (e) => {
+                    this.keys[e.key.toLowerCase()] = false;
+                });
             }
 
-            async play() {
-                document.getElementById('ui-menu').style.display = 'none';
-                document.getElementById('ui-loading').style.display = 'flex';
+            async joinOrCreate() {
+                document.getElementById('ui').style.display = 'none';
                 
                 try {
-                    // 1. Поиск комнаты
-                    const q = query(collection(this.db, "rooms"), where("status", "==", "waiting"), limit(1));
+                    // Ищем комнату с менее чем 4 игроками
+                    const q = query(collection(this.db, "rooms"), where("count", "<", 4), limit(1));
                     const snapshot = await getDocs(q);
 
                     if (!snapshot.empty) {
-                        // Нашли! Заходим.
                         const roomDoc = snapshot.docs[0];
                         this.roomId = roomDoc.id;
-                        await this.joinRoomInternal(roomDoc.data().players);
+                        await this.joinRoom(roomDoc.data().players);
                     } else {
-                        // Нет комнат. Создаем.
-                        const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-                        const newPlayer = { id: this.playerId, x: this.w/2, y: this.h/2, isHost: true };
-                        
+                        // Создаем новую
+                        const newPlayer = { id: this.playerId, x: 0, y: 0 };
                         const docRef = await addDoc(collection(this.db, "rooms"), {
-                            code: code,
-                            status: "waiting",
                             players: [newPlayer],
+                            count: 1,
                             createdAt: serverTimestamp()
                         });
-                        
                         this.roomId = docRef.id;
-                        this.isHost = true;
-                        this.players = [newPlayer];
-                        this.listenToRoom();
+                        this.myLocalPos = { x: 0, y: 0 };
+                        this.startListening();
                     }
                 } catch (err) {
                     alert("Ошибка сети: " + err.message);
@@ -108,122 +117,213 @@
                 }
             }
 
-            async joinRoomInternal(currentPlayers) {
-                // Транзакция для безопасного добавления себя
+            async joinRoom(currentPlayers) {
                 await runTransaction(this.db, async (transaction) => {
                     const ref = doc(this.db, "rooms", this.roomId);
                     const snap = await transaction.get(ref);
+                    if (!snap.exists()) throw new Error("Комната исчезла");
                     
-                    if (!snap.exists() || snap.data().status !== "waiting") {
-                        throw new Error("Комната занята или закрыта");
-                    }
+                    const data = snap.data();
+                    if (data.count >= 4) throw new Error("Комната полна");
 
-                    const newMe = { 
-                        id: this.playerId, 
-                        x: Math.random() * this.w, 
-                        y: Math.random() * this.h, 
-                        isHost: false 
-                    };
-                    
-                    const updatedPlayers = [...snap.data().players, newMe];
+                    // Спавнимся рядом с центром или случайно
+                    const offset = Math.random() * 100 - 50;
+                    const newMe = { id: this.playerId, x: offset, y: offset };
                     
                     transaction.update(ref, {
-                        players: updatedPlayers,
-                        // Если стало 2 игрока - сразу стартуем игру в базе
-                        status: updatedPlayers.length >= 2 ? "playing" : "waiting"
+                        players: [...data.players, newMe],
+                        count: data.players.length + 1
                     });
                 });
+                
+                // Инициализируем локальную позицию тем же значением
+                const meInDb = currentPlayers.find(p => p.id === this.playerId);
+                if(meInDb) {
+                    this.myLocalPos = { x: meInDb.x, y: meInDb.y };
+                } else {
+                    this.myLocalPos = { x: 0, y: 0 };
+                }
 
-                this.listenToRoom();
+                this.startListening();
             }
 
-            listenToRoom() {
-                if (this.unsub) this.unsub();
+            startListening() {
+                this.gameActive = true;
+                this.canvas.style.display = 'block';
                 
-                this.unsub = onSnapshot(doc(this.db, "rooms", this.roomId), (docSnap) => {
+                // Слушаем изменения комнаты
+                onSnapshot(doc(this.db, "rooms", this.roomId), (docSnap) => {
                     if (!docSnap.exists()) {
-                        alert("Комната удалена");
+                        alert("Комната закрыта");
                         location.reload();
                         return;
                     }
-                    
-                    const data = docSnap.data();
-                    this.players = data.players;
-                    
-                    // Проверка статуса игры
-                    if (data.status === "playing" && !this.gameStarted) {
-                        this.startGameLoop();
-                    }
+                    // Обновляем список ДРУГИХ игроков (или всех, но свою позицию игнорируем при рендере)
+                    this.remotePlayers = docSnap.data().players;
                 }, (err) => {
                     console.error(err);
                 });
-            }
-
-            startGameLoop() {
-                this.gameStarted = true;
-                document.getElementById('ui-loading').style.display = 'none';
-                this.canvas.style.display = 'block';
+                
                 this.loop();
             }
 
             loop() {
-                if (!this.gameStarted) return;
+                if (!this.gameActive) return;
 
+                // 1. ОБРАБОТКА ВВОДА И ЛОКАЛЬНОЕ ДВИЖЕНИЕ
+                // Это происходит мгновенно, независимо от сети
+                let dx = 0;
+                let dy = 0;
+                if (this.keys['w'] || this.keys['arrowup']) dy -= 1;
+                if (this.keys['s'] || this.keys['arrowdown']) dy += 1;
+                if (this.keys['a'] || this.keys['arrowleft']) dx -= 1;
+                if (this.keys['d'] || this.keys['arrowright']) dx += 1;
+
+                // Нормализация диагонального движения
+                if (dx !== 0 && dy !== 0) {
+                    const length = Math.sqrt(dx*dx + dy*dy);
+                    dx /= length;
+                    dy /= length;
+                }
+
+                // Применяем скорость
+                this.myLocalPos.x += dx * this.speed;
+                this.myLocalPos.y += dy * this.speed;
+
+                // ОТПРАВКА ПОЗИЦИИ В БАЗУ (Throttled)
+                const now = Date.now();
+                if (now - this.lastSendTime > this.sendInterval) {
+                    this.updateMyPos(this.myLocalPos.x, this.myLocalPos.y);
+                    this.lastSendTime = now;
+                }
+
+                // 2. ОБНОВЛЕНИЕ КАМЕРЫ
+                // Камера всегда следует за нашей ЛОКАЛЬНОЙ позицией (чтобы не было тряски)
+                this.camX += (this.myLocalPos.x - this.camX) * 0.1;
+                this.camY += (this.myLocalPos.y - this.camY) * 0.1;
+
+                // 3. РЕНДЕРИНГ
                 const ctx = this.ctx;
                 const w = this.w;
                 const h = this.h;
 
-                // Очистка
                 ctx.fillStyle = '#000';
                 ctx.fillRect(0, 0, w, h);
 
-                // Движение моего персонажа
-                const me = this.players.find(p => p.id === this.playerId);
-                if (me) {
-                    const speed = 5;
-                    if (this.keys['w'] || this.keys['arrowup']) me.y -= speed;
-                    if (this.keys['s'] || this.keys['arrowdown']) me.y += speed;
-                    if (this.keys['a'] || this.keys['arrowleft']) me.x -= speed;
-                    if (this.keys['d'] || this.keys['arrowright']) me.x += speed;
+                // Координаты экрана для центра камеры
+                const screenCenterX = w / 2;
+                const screenCenterY = h / 2;
 
-                    // Границы
-                    if (me.x < 20) me.x = 20;
-                    if (me.x > w - 20) me.x = w - 20;
-                    if (me.y < 20) me.y = 20;
-                    if (me.y > h - 20) me.y = h - 20;
+                // Функция перевода мировых координат в экранные
+                const worldToScreen = (wx, wy) => {
+                    return {
+                        x: wx - this.camX + screenCenterX,
+                        y: wy - this.camY + screenCenterY
+                    };
+                };
 
-                    // Отправка позиции (Throttle 50ms для плавности)
-                    const now = Date.now();
-                    if (now - this.lastSendTime > 50) {
-                        this.updatePosition(me.x, me.y);
-                        this.lastSendTime = now;
-                    }
-                }
+                // Рисование сетки
+                this.drawGrid(ctx, worldToScreen);
 
-                // Рендер всех игроков
-                this.players.forEach(p => {
-                    ctx.beginPath();
-                    ctx.rect(p.x - 15, p.y - 15, 30, 30); // Квадрат
+                // Рисование центра мира (0,0)
+                this.drawCenterCross(ctx, worldToScreen);
+
+                // Рисование других игроков
+                this.remotePlayers.forEach(p => {
+                    if (p.id === this.playerId) return; // Себя рисуем отдельно
+
+                    const pos = worldToScreen(p.x, p.y);
                     
-                    // Цвет: Хост белый, Гость красный (или наоборот, для различения)
-                    if (p.id === this.playerId) {
-                        ctx.fillStyle = '#fff'; // Я всегда белый
-                    } else {
-                        ctx.fillStyle = '#ff4444'; // Друг красный
+                    // Оптимизация: рисуем только если видно на экране
+                    if (pos.x > -50 && pos.x < w + 50 && pos.y > -50 && pos.y < h + 50) {
+                        ctx.beginPath();
+                        ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
+                        ctx.fillStyle = '#ff4444'; // Красный для других
+                        ctx.fill();
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                        
+                        // Текст имени
+                        ctx.fillStyle = '#aaa';
+                        ctx.font = '10px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText("Other", pos.x, pos.y - 15);
                     }
-                    
-                    ctx.fill();
-                    ctx.strokeStyle = '#333';
-                    ctx.stroke();
                 });
 
-                this.loopId = requestAnimationFrame(() => this.loop());
+                // Рисование СЕБЯ (белый квадрат/круг)
+                const myScreenPos = worldToScreen(this.myLocalPos.x, this.myLocalPos.y);
+                ctx.beginPath();
+                ctx.arc(myScreenPos.x, myScreenPos.y, 12, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff'; // Белый для меня
+                ctx.shadowColor = '#fff';
+                ctx.shadowBlur = 10;
+                ctx.fill();
+                ctx.shadowBlur = 0; // Сброс тени
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                requestAnimationFrame(() => this.loop());
             }
 
-            updatePosition(x, y) {
-                // Оптимизация: пишем только координаты конкретного игрока внутри массива
-                // Firestore не позволяет обновлять элемент массива напрямую без чтения всего массива.
-                // Для простоты делаем транзакцию обновления всего массива players.
+            drawGrid(ctx, worldToScreen) {
+                const gridSize = 100;
+                ctx.strokeStyle = '#222';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+
+                // Вычисляем границы видимой области в мировых координатах
+                const viewLeft = this.camX - this.w / 2;
+                const viewTop = this.camY - this.h / 2;
+                const viewRight = this.camX + this.w / 2;
+                const viewBottom = this.camY + this.h / 2;
+
+                // Вертикальные линии
+                let startX = Math.floor(viewLeft / gridSize) * gridSize;
+                for (let x = startX; x <= viewRight; x += gridSize) {
+                    const s1 = worldToScreen(x, viewTop);
+                    const s2 = worldToScreen(x, viewBottom);
+                    ctx.moveTo(s1.x, s1.y);
+                    ctx.lineTo(s2.x, s2.y);
+                }
+
+                // Горизонтальные линии
+                let startY = Math.floor(viewTop / gridSize) * gridSize;
+                for (let y = startY; y <= viewBottom; y += gridSize) {
+                    const s1 = worldToScreen(viewLeft, y);
+                    const s2 = worldToScreen(viewRight, y);
+                    ctx.moveTo(s1.x, s1.y);
+                    ctx.lineTo(s2.x, s2.y);
+                }
+                
+                ctx.stroke();
+            }
+
+            drawCenterCross(ctx, worldToScreen) {
+                const pos = worldToScreen(0, 0);
+                
+                // Проверяем видимость
+                if (pos.x > -50 && pos.x < this.w + 50 && pos.y > -50 && pos.y < this.h + 50) {
+                    ctx.strokeStyle = '#ff0000';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(pos.x - 20, pos.y);
+                    ctx.lineTo(pos.x + 20, pos.y);
+                    ctx.moveTo(pos.x, pos.y - 20);
+                    ctx.lineTo(pos.x, pos.y + 20);
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = '#ff0000';
+                    ctx.font = 'bold 12px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText("CENTER (0,0)", pos.x, pos.y + 30);
+                }
+            }
+
+            updateMyPos(x, y) {
+                // Используем транзакцию для безопасной записи
                 runTransaction(this.db, async (transaction) => {
                     const ref = doc(this.db, "rooms", this.roomId);
                     const snap = await transaction.get(ref);
@@ -241,110 +341,43 @@
             }
         }
 
-        // Инициализация при загрузке DOM
         window.onload = () => {
-            const game = new GameEngine();
-            window.gameInstance = game; // Доступ из консоли для отладки
-            
-            // Привязка кнопки
-            document.getElementById('btn-play').onclick = () => game.play();
+            const game = new FixedGame();
+            document.getElementById('btn-start').onclick = () => game.joinOrCreate();
         };
-
     </script>
 
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #000;
-            color: #fff;
-            font-family: sans-serif;
-            overflow: hidden; /* Убираем скролл */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+        body { margin: 0; background: #000; overflow: hidden; color: white; font-family: sans-serif; }
+        canvas { display: none; position: absolute; top: 0; left: 0; z-index: 1; cursor: crosshair; }
+        #ui { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 10; background: rgba(0,0,0,0.9);
         }
-
-        canvas {
-            display: none; /* Скрыт до начала игры */
-            border: 1px solid #333;
+        button { 
+            padding: 20px 40px; font-size: 24px; background: #fff; color: #000; 
+            border: none; cursor: pointer; font-weight: bold;
         }
-
-        .ui-layer {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 10;
-            background: rgba(0,0,0,0.9);
-        }
-
-        #ui-loading {
-            display: none;
-        }
-
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 20px;
-            color: #00ffcc;
-        }
-
-        button {
-            padding: 15px 40px;
-            font-size: 1.2rem;
-            background: #00ffcc;
-            color: #000;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: transform 0.1s;
-        }
-
-        button:hover {
-            transform: scale(1.05);
-        }
-
-        .loader {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #333;
-            border-top: 4px solid #00ffcc;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        p {
-            margin-top: 10px;
-            color: #aaa;
-        }
+        button:hover { background: #ccc; }
+        h1 { margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
+        .controls-hint { margin-top: 15px; color: #888; font-size: 0.9rem; text-align: center; line-height: 1.5; }
     </style>
 </head>
 <body>
 
-    <!-- Меню -->
-    <div id="ui-menu" class="ui-layer">
-        <h1>AUTO MATCH</h1>
-        <button id="btn-play">ИГРАТЬ</button>
-        <p>Нажми, чтобы найти соперника</p>
+<div id="ui">
+    <h1>FIXED MOVEMENT</h1>
+    <button id="btn-start">ИГРАТЬ</button>
+    <div class="controls-hint">
+        Управление: WASD или Стрелки<br>
+        Камера следует за вами<br>
+        Красный крест = Центр Мира (0,0)<br>
+        <span style="color:#00ffcc">Теперь движение должно быть плавным!</span>
     </div>
+</div>
 
-    <!-- Экран загрузки/поиска -->
-    <div id="ui-loading" class="ui-layer">
-        <div class="loader"></div>
-        <p>Поиск игры...</p>
-    </div>
-
-    <!-- Игровой холст -->
-    <canvas id="game-canvas"></canvas>
+<canvas id="game-canvas"></canvas>
 
 </body>
 </html>
