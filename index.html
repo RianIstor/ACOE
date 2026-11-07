@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Precision Click Game: Final</title>
+    <title>Precision Click Game: Fixed Scoring</title>
     
-    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { 
@@ -27,10 +26,7 @@
         try {
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
-            console.log("✅ Firebase Connected");
-        } catch (e) {
-            console.error("❌ Firebase Error:", e);
-        }
+        } catch (e) { console.error("Firebase Error:", e); }
 
         window.fbDb = db;
         window.fbFunctions = { collection, addDoc, doc, updateDoc, onSnapshot, query, where, limit, serverTimestamp, runTransaction, getDocs, deleteDoc, getDoc };
@@ -50,7 +46,7 @@
         .avatar-placeholder { width: 100%; height: 100%; background: #333; display: flex; justify-content: center; align-items: center; font-size: 24px; color: #777; }
         #file-input-hidden { display: none; }
         .profile-info { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
-        #nickname-input { background: transparent; border: none; border-bottom: 1px dashed #444; color: #FFF; font-family: inherit; font-size: 14px; outline: none; width: 100%; padding: 2px 0; text-align: left; }
+        #nickname-input { background: transparent; border: none; border-bottom: 1px dashed #444; color: #FFF; font-family: inherit; font-size: 14px; outline: none; width: 100%; padding: 2px 0; }
         #nickname-input:focus { border-bottom: 1px solid #FFF; }
         .xp-bar-container { width: 100%; height: 6px; background: #222; border-radius: 3px; overflow: hidden; margin-top: 2px; }
         #xp-fill { height: 100%; background: linear-gradient(90deg, #0F0, #0A0); width: 0%; transition: width 0.3s ease-out; }
@@ -67,53 +63,52 @@
         .mode-online { color: #DA70D6; border-color: #DA70D6; background: rgba(218,112,214,0.1); }
 
         #bottom-info { position: absolute; bottom: 10px; right: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; z-index: 100; }
-        #sens-indicator { font-size: 14px; color: #0F0; letter-spacing: 1px; opacity: 0; transition: opacity 0.3s; text-shadow: 0 0 5px rgba(0,255,0,0.3); }
+        #sens-indicator { font-size: 14px; color: #0F0; letter-spacing: 1px; opacity: 0; transition: opacity 0.3s; }
         #fps-counter { font-size: 12px; color: #444; }
 
         #bottom-menu { position: absolute; bottom: 0; left: 0; width: 1920px; height: 120px; background: linear-gradient(to top, #000, #111); border-top: 2px solid #222; display: flex; justify-content: center; align-items: center; gap: 20px; z-index: 200; transition: transform 0.3s ease, opacity 0.3s ease; }
         #bottom-menu.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
-        
         .menu-btn { background: transparent; border: 2px solid #333; color: #888; padding: 15px 30px; font-family: inherit; font-size: 20px; transition: all 0.3s; text-transform: uppercase; letter-spacing: 2px; outline: none; border-radius: 4px; pointer-events: auto; white-space: nowrap; }
         .menu-btn:hover { border-color: #FFF; color: #FFF; box-shadow: 0 0 20px rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); }
         
         #intro-overlay { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; justify-content: center; align-items: center; z-index: 50; pointer-events: none; }
-        #big-start-circle { width: 400px; height: 400px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); pointer-events: auto; position: relative; box-shadow: 0 0 50px rgba(255,255,255,0.05); }
-        #big-start-circle::after { content: "CLICK TO START"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; color: rgba(255,255,255,0.7); pointer-events: none; white-space: nowrap; letter-spacing: 3px; }
+        #big-start-circle { width: 400px; height: 400px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); pointer-events: auto; position: relative; }
+        #big-start-circle::after { content: "CLICK TO START"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; color: rgba(255,255,255,0.7); pointer-events: none; letter-spacing: 3px; }
 
         #ready-overlay { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; justify-content: center; align-items: center; z-index: 60; pointer-events: none; background: rgba(0,0,0,0.8); }
-        #ready-circle { width: 300px; height: 300px; border-radius: 50%; border: 4px solid #DA70D6; pointer-events: auto; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; box-shadow: 0 0 30px rgba(218,112,214,0.3); }
+        #ready-circle { width: 300px; height: 300px; border-radius: 50%; border: 4px solid #DA70D6; pointer-events: auto; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; }
         #ready-circle:hover { background: rgba(218,112,214,0.1); transform: scale(1.05); }
         #ready-text { font-size: 24px; color: #DA70D6; font-weight: bold; letter-spacing: 2px; }
 
         .target-circle { position: absolute; border-radius: 50%; border: 2px solid #FFF; background: transparent; pointer-events: auto; transform-origin: center center; transition: border-color 0.1s, box-shadow 0.1s; }
+        /* ЦВЕТОВАЯ ОЦЕНКА ЖИЗНИ КРУГА (СТАРЫЕ ПОРОГИ) */
         .grade-fast { border-color: #0F0 !important; box-shadow: 0 0 25px rgba(0,255,0,0.4); }
         .grade-medium { border-color: #FA0 !important; box-shadow: 0 0 25px rgba(255,170,0,0.4); }
         .grade-slow { border-color: #888 !important; box-shadow: 0 0 15px rgba(136,136,136,0.3); }
         .grade-miss { border-color: #F00 !important; box-shadow: 0 0 30px rgba(255,0,0,0.5); }
 
-        .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15,15,15,0.98); backdrop-filter: blur(15px); border: 2px solid #333; padding: 50px; z-index: 500; width: 700px; max-height: 800px; overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,0.9); border-radius: 12px; }
+        .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15,15,15,0.98); backdrop-filter: blur(15px); border: 2px solid #333; padding: 50px; z-index: 500; width: 700px; max-height: 800px; overflow-y: auto; border-radius: 12px; }
         .modal h2 { text-align: center; margin-bottom: 20px; color: #FFF; letter-spacing: 5px; font-size: 32px; font-weight: normal; border-bottom: 2px solid #222; padding-bottom: 25px; }
         
         .main-mode-selector { display: flex; justify-content: center; gap: 20px; margin-bottom: 30px; }
         .main-tab { padding: 15px 40px; border: 2px solid #333; background: transparent; color: #666; font-family: inherit; font-size: 24px; cursor: pointer; transition: all 0.2s; border-radius: 8px; text-transform: uppercase; letter-spacing: 2px; }
-        .main-tab.active-offline { border-color: #0F0; color: #0F0; background: rgba(0,255,0,0.1); box-shadow: 0 0 15px rgba(0,255,0,0.2); }
-        .main-tab.active-online { border-color: #DA70D6; color: #DA70D6; background: rgba(218,112,214,0.1); box-shadow: 0 0 15px rgba(218,112,214,0.2); }
+        .main-tab.active-offline { border-color: #0F0; color: #0F0; background: rgba(0,255,0,0.1); }
+        .main-tab.active-online { border-color: #DA70D6; color: #DA70D6; background: rgba(218,112,214,0.1); }
         .main-tab:hover:not(.active-offline):not(.active-online) { border-color: #555; color: #AAA; }
 
         .mode-selector { display: flex; justify-content: center; gap: 15px; margin-bottom: 30px; }
         .mode-tab { padding: 10px 20px; border: 2px solid #333; background: transparent; color: #666; font-family: inherit; font-size: 16px; cursor: pointer; transition: all 0.2s; border-radius: 4px; }
-        .mode-tab.active-normal { border-color: #0F0; color: #0F0; background: rgba(0,255,0,0.1); box-shadow: 0 0 10px rgba(0,255,0,0.2); }
-        .mode-tab.active-medium { border-color: #0AF; color: #0AF; background: rgba(0,170,255,0.1); box-shadow: 0 0 10px rgba(0,170,255,0.2); }
-        .mode-tab.active-hard { border-color: #F00; color: #F00; background: rgba(255,0,0,0.1); box-shadow: 0 0 10px rgba(255,0,0,0.2); }
+        .mode-tab.active-normal { border-color: #0F0; color: #0F0; background: rgba(0,255,0,0.1); }
+        .mode-tab.active-medium { border-color: #0AF; color: #0AF; background: rgba(0,170,255,0.1); }
+        .mode-tab.active-hard { border-color: #F00; color: #F00; background: rgba(255,0,0,0.1); }
         .mode-tab.locked { opacity: 0.3; pointer-events: none; filter: grayscale(100%); }
-        .mode-tab:hover:not(.active-normal):not(.active-medium):not(.active-hard) { border-color: #555; color: #AAA; }
 
         .setting-group { margin-bottom: 35px; padding-bottom: 35px; border-bottom: 1px solid #222; }
         .setting-label { display: block; font-size: 18px; color: #666; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; }
         .control-row { display: flex; align-items: center; justify-content: space-between; gap: 25px; }
         
-        input[type="range"] { flex-grow: 1; accent-color: #FFF; height: 8px; background: #333; border-radius: 4px; appearance: none; -webkit-appearance: none; outline: none; pointer-events: auto; }
-        input[type="range"]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 24px; height: 24px; background: #FFF; border-radius: 50%; cursor: none !important; }
+        input[type="range"] { flex-grow: 1; accent-color: #FFF; height: 8px; background: #333; border-radius: 4px; appearance: none; outline: none; pointer-events: auto; }
+        input[type="range"]::-webkit-slider-thumb { appearance: none; width: 24px; height: 24px; background: #FFF; border-radius: 50%; cursor: none !important; }
         
         select { background: #111; color: #CCC; border: 2px solid #333; padding: 15px 20px; font-family: inherit; outline: none; width: 100%; border-radius: 6px; font-size: 20px; pointer-events: auto; }
         select:focus { border-color: #666; }
@@ -123,11 +118,11 @@
         .slider-toggle { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .3s; border-radius: 36px; }
         .slider-toggle:before { position: absolute; content: ""; height: 28px; width: 28px; left: 4px; bottom: 4px; background-color: #888; transition: .3s; border-radius: 50%; }
         input:checked + .slider-toggle { background-color: #222; }
-        input:checked + .slider-toggle:before { transform: translateX(34px); background-color: #0F0; box-shadow: 0 0 15px rgba(0,255,0,0.5); }
+        input:checked + .slider-toggle:before { transform: translateX(34px); background-color: #0F0; }
 
         .preview-box { width: 60px; height: 60px; border: 2px solid #333; display: flex; justify-content: center; align-items: center; background: #000; border-radius: 6px; }
-        .preview-dot { background-color: #FFF; border-radius: 50%; box-shadow: 0 0 8px #FFF; }
-        .volume-val { min-width: 80px; text-align: right; font-size: 20px; color: #888; font-variant-numeric: tabular-nums; }
+        .preview-dot { background-color: #FFF; border-radius: 50%; }
+        .volume-val { min-width: 80px; text-align: right; font-size: 20px; color: #888; }
 
         .level-list { display: flex; flex-direction: column; gap: 10px; }
         .level-item { display: flex; justify-content: space-between; align-items: center; padding: 20px 25px; border: 2px solid #222; background: rgba(255,255,255,0.02); transition: all 0.2s; border-radius: 6px; pointer-events: auto; }
@@ -153,56 +148,57 @@
         .join-btn { background: #DA70D6; color: #000; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; }
         .join-btn:hover { background: #ff99ff; }
 
-        /* --- ТАБЛИЦА ЛИДЕРОВ (ПРАВЫЙ ВЕРХНИЙ УГОЛ) --- */
         #leaderboard-hud {
             position: absolute;
-            top: 20px;
-            right: 20px;
-            width: 340px;
+            top: 10px;
+            right: 10px;
+            width: 200px;
             background: rgba(0, 0, 0, 0.75);
             border: 1px solid #444;
-            border-radius: 8px;
-            padding: 12px;
+            border-radius: 6px;
+            padding: 6px;
             z-index: 130;
             display: none;
             backdrop-filter: blur(6px);
         }
         #leaderboard-hud.active { display: block; }
         .lb-title {
-            font-size: 14px;
+            font-size: 10px;
             color: #888;
             text-align: center;
-            letter-spacing: 3px;
-            margin-bottom: 10px;
+            letter-spacing: 2px;
+            margin-bottom: 4px;
             border-bottom: 1px solid #333;
-            padding-bottom: 8px;
+            padding-bottom: 4px;
         }
         .lb-row {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 6px 8px;
-            margin-bottom: 4px;
-            border-radius: 4px;
+            gap: 6px;
+            padding: 3px 5px;
+            margin-bottom: 2px;
+            border-radius: 3px;
             background: rgba(255,255,255,0.03);
-            transition: background 0.2s;
         }
         .lb-row.is-local {
             background: rgba(0,255,0,0.1);
-            border: 1px solid #0F0;
+            border: 1px solid rgba(0,255,0,0.3);
+        }
+        .lb-row.is-finished {
+            opacity: 0.6;
         }
         .lb-rank {
-            font-size: 14px;
+            font-size: 11px;
             color: #888;
-            min-width: 20px;
+            min-width: 16px;
             font-weight: bold;
         }
         .lb-row.rank-1 .lb-rank { color: #FFD700; }
         .lb-row.rank-2 .lb-rank { color: #C0C0C0; }
         .lb-row.rank-3 .lb-rank { color: #CD7F32; }
         .lb-avatar {
-            width: 32px;
-            height: 32px;
+            width: 22px;
+            height: 22px;
             border-radius: 50%;
             border: 1px solid #555;
             object-fit: cover;
@@ -210,15 +206,15 @@
             flex-shrink: 0;
         }
         .lb-avatar-placeholder {
-            width: 32px;
-            height: 32px;
+            width: 22px;
+            height: 22px;
             border-radius: 50%;
             border: 1px solid #555;
             background: #333;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
+            font-size: 11px;
             color: #777;
             flex-shrink: 0;
         }
@@ -230,7 +226,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 13px;
+            font-size: 11px;
         }
         .lb-nick {
             color: #fff;
@@ -238,125 +234,66 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            font-size: 11px;
         }
         .lb-row.is-local .lb-nick { color: #0F0; }
         .lb-level {
             color: #FFD700;
-            font-size: 11px;
+            font-size: 9px;
         }
         .lb-score-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-top: 2px;
+            margin-top: 1px;
         }
         .lb-xp {
-            font-size: 11px;
+            font-size: 9px;
             color: #666;
         }
         .lb-score {
-            font-size: 14px;
+            font-size: 12px;
             color: #DA70D6;
             font-weight: bold;
         }
         .lb-row.is-local .lb-score { color: #0F0; }
+        .lb-finished-icon {
+            color: #0F0;
+            font-size: 10px;
+            margin-left: 2px;
+        }
 
-        /* --- СПИСОК ДРУЗЕЙ --- */
-        .friend-input-row {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .friend-input-row input {
-            flex-grow: 1;
-            background: #111;
-            border: 1px solid #333;
-            color: #fff;
-            padding: 10px;
-            font-family: inherit;
-            font-size: 16px;
-            border-radius: 4px;
-            outline: none;
-        }
+        .friend-input-row { display: flex; gap: 10px; margin-bottom: 20px; }
+        .friend-input-row input { flex-grow: 1; background: #111; border: 1px solid #333; color: #fff; padding: 10px; font-family: inherit; font-size: 16px; border-radius: 4px; outline: none; }
         .friend-input-row input:focus { border-color: #0AF; }
-        .friend-input-row button {
-            background: #0AF;
-            color: #000;
-            border: none;
-            padding: 10px 20px;
-            font-family: inherit;
-            font-weight: bold;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .friends-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        .friend-card {
-            background: #222;
-            border: 1px solid #444;
-            padding: 12px;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .friend-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: #333;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            color: #777;
-            border: 1px solid #555;
-        }
-        .friend-info {
-            flex-grow: 1;
-        }
-        .friend-nick {
-            font-size: 16px;
-            color: #fff;
-            font-weight: bold;
-        }
-        .friend-stats {
-            font-size: 12px;
-            color: #888;
-            margin-top: 2px;
-        }
-        .remove-friend {
-            background: transparent;
-            border: 1px solid #F00;
-            color: #F00;
-            padding: 5px 10px;
-            font-size: 12px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
+        .friend-input-row button { background: #0AF; color: #000; border: none; padding: 10px 20px; font-family: inherit; font-weight: bold; border-radius: 4px; cursor: pointer; }
+        .friends-list { display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; }
+        .friend-card { background: #222; border: 1px solid #444; padding: 12px; border-radius: 6px; display: flex; align-items: center; gap: 12px; }
+        .friend-avatar { width: 40px; height: 40px; border-radius: 50%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #777; border: 1px solid #555; }
+        .friend-info { flex-grow: 1; }
+        .friend-nick { font-size: 16px; color: #fff; font-weight: bold; }
+        .friend-stats { font-size: 12px; color: #888; margin-top: 2px; }
+        .remove-friend { background: transparent; border: 1px solid #F00; color: #F00; padding: 5px 10px; font-size: 12px; border-radius: 4px; cursor: pointer; }
         .remove-friend:hover { background: #F00; color: #000; }
 
-        #crop-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1a1a1a; border: 2px solid #444; padding: 30px; z-index: 1000; border-radius: 12px; box-shadow: 0 0 50px rgba(0,0,0,0.8); width: 600px; text-align: center; }
+        #crop-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1a1a1a; border: 2px solid #444; padding: 30px; z-index: 1000; border-radius: 12px; width: 600px; text-align: center; }
         #crop-canvas-container { position: relative; width: 400px; height: 400px; margin: 0 auto 20px auto; background: #000; border-radius: 50%; overflow: hidden; border: 2px solid #555; cursor: grab; }
         #crop-canvas-container:active { cursor: grabbing; }
         #crop-canvas { width: 100%; height: 100%; display: block; }
         .crop-controls { display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 20px; }
         .zoom-control { display: flex; align-items: center; gap: 10px; color: #888; font-size: 14px; }
         #zoom-slider { width: 150px; }
-        .save-crop-btn { background: #0F0; color: #000; border: 1px solid #0F0; padding: 12px 30px; font-family: inherit; font-size: 18px; font-weight: bold; cursor: pointer; border-radius: 4px; transition: all 0.2s; letter-spacing: 1px; }
-        .save-crop-btn:hover { background: #0c0; box-shadow: 0 0 15px rgba(0,255,0,0.6); transform: scale(1.05); }
+        .save-crop-btn { background: #0F0; color: #000; border: 1px solid #0F0; padding: 12px 30px; font-family: inherit; font-size: 18px; font-weight: bold; cursor: pointer; border-radius: 4px; letter-spacing: 1px; }
+        .save-crop-btn:hover { background: #0c0; }
 
         .item-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 15px; margin-bottom: 20px; min-height: 100px; }
-        .item-card { background: #222; border: 1px solid #444; border-radius: 8px; padding: 15px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; transition: all 0.2s; }
+        .item-card { background: #222; border: 1px solid #444; border-radius: 8px; padding: 15px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
         .item-card:hover { border-color: #666; background: #2a2a2a; }
         .item-icon { font-size: 32px; width: 50px; height: 50px; display: flex; justify-content: center; align-items: center; background: #111; border-radius: 50%; border: 1px solid #333; }
         .item-name { font-size: 14px; color: #DDD; word-break: break-word; }
         .empty-text { text-align: center; color: #666; font-style: italic; margin-top: 20px; grid-column: 1 / -1; }
+
+        .result-star { margin-right: 3px; }
     </style>
 </head>
 <body>
@@ -370,12 +307,9 @@
                 <div class="avatar-placeholder" id="avatar-placeholder">👤</div>
             </div>
             <input type="file" id="file-input-hidden" accept="image/*">
-            
             <div class="profile-info">
                 <input type="text" id="nickname-input" placeholder="Nickname" maxlength="15">
-                <div class="xp-bar-container">
-                    <div id="xp-fill"></div>
-                </div>
+                <div class="xp-bar-container"><div id="xp-fill"></div></div>
                 <div class="stats-row">
                     <span id="level-display-profile">LVL 1</span>
                     <span id="xp-text">0 / 10 XP</span>
@@ -394,7 +328,6 @@
             <div id="mode-indicator" class="mode-normal">NORMAL</div>
         </div>
 
-        <!-- ТАБЛИЦА ЛИДЕРОВ В ПРАВОМ ВЕРХНЕМ УГЛУ -->
         <div id="leaderboard-hud">
             <div class="lb-title">ЛИДЕРЫ</div>
             <div id="lb-rows"></div>
@@ -403,9 +336,7 @@
         <div id="game-area"></div>
         <div id="intro-overlay"><div id="big-start-circle"></div></div>
         <div id="ready-overlay">
-            <div id="ready-circle">
-                <span id="ready-text">READY?</span>
-            </div>
+            <div id="ready-circle"><span id="ready-text">READY?</span></div>
         </div>
 
         <div id="bottom-menu">
@@ -541,6 +472,7 @@
                         <th style="text-align:left; color:#888; border-bottom:1px solid #444; padding:10px;">#</th>
                         <th style="text-align:left; color:#888; border-bottom:1px solid #444; padding:10px;">Игрок</th>
                         <th style="text-align:left; color:#888; border-bottom:1px solid #444; padding:10px;">Очки</th>
+                        <th style="text-align:center; color:#888; border-bottom:1px solid #444; padding:10px;">Звёзды</th>
                         <th style="text-align:left; color:#888; border-bottom:1px solid #444; padding:10px;">Точность</th>
                     </tr>
                 </thead>
@@ -571,7 +503,6 @@
             <button class="menu-btn close-modal-btn" id="btn-close-shop">ЗАКРЫТЬ</button>
         </div>
 
-        <!-- СПИСОК ДРУЗЕЙ -->
         <div id="friends-modal" class="modal">
             <h2>ДРУЗЬЯ</h2>
             <div class="friend-input-row">
@@ -631,34 +562,29 @@ const els = {
     cropModal: document.getElementById('crop-modal'), cropCanvas: document.getElementById('crop-canvas'), zoomSlider: document.getElementById('zoom-slider'), btnConfirmCrop: document.getElementById('btn-confirm-crop'),
     tabNormal: document.getElementById('tab-normal'), tabMedium: document.getElementById('tab-medium'), tabHard: document.getElementById('tab-hard'),
     btnInventory: document.getElementById('btn-inventory'), btnShop: document.getElementById('btn-shop'), inventoryModal: document.getElementById('inventory-modal'), shopModal: document.getElementById('shop-modal'), btnCloseInventory: document.getElementById('btn-close-inventory'), btnCloseShop: document.getElementById('btn-close-shop'), inventoryGrid: document.getElementById('inventory-grid'), shopGrid: document.getElementById('shop-grid'),
-    
     modeChoiceModal: document.getElementById('mode-choice-modal'),
     tabOffline: document.getElementById('tab-offline'),
     tabOnline: document.getElementById('tab-online'),
     modeDesc: document.getElementById('mode-desc'),
     btnConfirmMode: document.getElementById('btn-confirm-mode'),
     btnBackFromMode: document.getElementById('btn-back-from-mode'),
-    
     onlineActionModal: document.getElementById('online-action-modal'),
     actionLevelInfo: document.getElementById('action-level-info'),
     actionDiffInfo: document.getElementById('action-diff-info'),
     btnGoCreate: document.getElementById('btn-go-create'),
     btnGoFind: document.getElementById('btn-go-find'),
     btnBackFromAction: document.getElementById('btn-back-from-action'),
-
     onlineServerModal: document.getElementById('online-server-modal'),
     serverListContainer: document.getElementById('server-list-container'),
     btnBackToAction: document.getElementById('btn-back-to-action'),
     btnRefreshServers: document.getElementById('btn-refresh-servers'),
     btnCloseOnline: document.getElementById('btn-close-online'),
-    
     createServerModal: document.getElementById('create-server-modal'),
     serverNameInput: document.getElementById('server-name-input'),
     serverDurationSlider: document.getElementById('server-duration-slider'),
     serverDurationVal: document.getElementById('server-duration-val'),
     btnCancelCreate: document.getElementById('btn-cancel-create'),
     btnConfirmCreate: document.getElementById('btn-confirm-create'),
-    
     lobbyModal: document.getElementById('lobby-modal'),
     lobbyRoomName: document.getElementById('lobby-room-name'),
     lobbyPlayerCount: document.getElementById('lobby-player-count'),
@@ -666,14 +592,11 @@ const els = {
     lobbyStatusText: document.getElementById('lobby-status-text'),
     btnHostStart: document.getElementById('btn-host-start'),
     btnLeaveLobby: document.getElementById('btn-leave-lobby'),
-    
     onlineResultsScreen: document.getElementById('online-results-screen'),
     onlineLeaderboard: document.querySelector('#online-leaderboard tbody'),
     btnBackToMainFromRes: document.getElementById('btn-back-to-main-from-res'),
-    
     leaderboardHud: document.getElementById('leaderboard-hud'),
     lbRows: document.getElementById('lb-rows'),
-    
     btnFriends: document.getElementById('btn-friends'),
     friendsModal: document.getElementById('friends-modal'),
     friendNickInput: document.getElementById('friend-nick-input'),
@@ -719,13 +642,13 @@ function applyCursorStyle() {
 }
 function resetCursorToCenter() { virtualMouseX = VIRTUAL_WIDTH / 2; virtualMouseY = VIRTUAL_HEIGHT / 2; syncCursorVisual(); }
 function syncCursorVisual() { els.cursor.style.transform = `translate(${virtualMouseX}px, ${virtualMouseY}px)`; }
-function updateSensIndicator() { if (state.phase === 'PLAYING' || state.phase === 'INTRO' || state.phase === 'ONLINE_PLAYING') { els.sensIndicator.style.opacity = '1'; els.sensIndicator.textContent = `SENS: ${userSettings.sensitivity.toFixed(2)}x`; els.sensIndicator.style.color = '#0F0'; } else { els.sensIndicator.style.opacity = '0'; } }
+function updateSensIndicator() { if (['PLAYING','INTRO','ONLINE_PLAYING','ONLINE_WAITING'].includes(state.phase)) { els.sensIndicator.style.opacity = '1'; els.sensIndicator.textContent = `SENS: ${userSettings.sensitivity.toFixed(2)}x`; els.sensIndicator.style.color = '#0F0'; } else { els.sensIndicator.style.opacity = '0'; } }
 
 let virtualMouseX = VIRTUAL_WIDTH / 2;
 let virtualMouseY = VIRTUAL_HEIGHT / 2;
 window.addEventListener('mousemove', e => { 
     if (els.cropModal.style.display === 'block') return;
-    const isInGame = (state.phase === 'PLAYING' || state.phase === 'INTRO' || state.phase === 'ONLINE_PLAYING');
+    const isInGame = ['PLAYING','INTRO','ONLINE_PLAYING','ONLINE_WAITING'].includes(state.phase);
     const rect = els.virtualScreen.getBoundingClientRect();
     const rawX = (e.clientX - rect.left) / currentScale;
     const rawY = (e.clientY - rect.top) / currentScale;
@@ -746,6 +669,7 @@ window.addEventListener('mousedown', e => {
     if (state.phase === 'PLAYING' || state.phase === 'ONLINE_PLAYING') handleTargetClick();
 });
 
+// ЛОГИКА ОЦЕНКИ И ОЧКОВ
 function handleTargetClick() {
     for (let i = state.targets.length - 1; i >= 0; i--) {
         const t = state.targets[i];
@@ -758,12 +682,31 @@ function handleTargetClick() {
             t.dead = true; 
             state.stats.total++;
             
-            // ПРАВИЛЬНАЯ ОЦЕНКА КРУГОВ
+            // 1. Вычисляем долю прожитого времени (как раньше)
             const r = (performance.now() - t.spawnTime) / t.totalLife;
-            let points = 0;
-            if (r < 0.67) { t.el.classList.add('grade-fast'); state.stats.fast++; points = 10; SFX.fast(); }
-            else if (r < 0.85) { t.el.classList.add('grade-medium'); state.stats.med++; points = 5; SFX.med(); }
-            else { t.el.classList.add('grade-slow'); state.stats.slow++; points = 1; SFX.slow(); }
+            
+            // 2. Определяем цвет (старые пороги: 0.67 и 0.85)
+            if (r < 0.67) { 
+                t.el.classList.add('grade-fast'); 
+                state.stats.fast++; 
+                SFX.fast(); 
+            }
+            else if (r < 0.85) { 
+                t.el.classList.add('grade-medium'); 
+                state.stats.med++; 
+                SFX.med(); 
+            }
+            else { 
+                t.el.classList.add('grade-slow'); 
+                state.stats.slow++; 
+                SFX.slow(); 
+            }
+            
+            // 3. Начисляем очки (новая логика: от 1 до 10)
+            // Если кликнули быстро (r близко к 0), получаем много очков.
+            // Если медленно (r близко к 1), мало очков.
+            let points = Math.max(1, Math.round((1 - r) * 10));
+            state.stats.points = (state.stats.points || 0) + points;
             
             if(state.phase === 'PLAYING') {
                 const oldLevel = calculateLevel(userProfile.xp);
@@ -771,7 +714,6 @@ function handleTargetClick() {
                 const newLevel = calculateLevel(userProfile.xp);
                 if (newLevel > oldLevel) SFX.levelUp();
             } else if (state.phase === 'ONLINE_PLAYING') {
-                // В онлайне накапливаем локальный счёт и сразу обновляем таблицу
                 state.localScore += points;
                 renderLeaderboard();
                 sendScoreUpdate();
@@ -783,7 +725,6 @@ function handleTargetClick() {
     }
 }
 
-// Троттлинг отправки счёта в Firebase (не чаще 1 раза в 500мс)
 let lastScoreSendTime = 0;
 async function sendScoreUpdate() {
     if (!window.fbDb || !state.roomId) return;
@@ -795,11 +736,20 @@ async function sendScoreUpdate() {
         const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
         await window.fbFunctions.updateDoc(ref, {
             [`playerScores.${myUserId}`]: state.localScore,
-            [`playerAccuracy.${myUserId}`]: state.stats.total > 0 ? (state.stats.fast / state.stats.total) * 100 : 0
+            [`playerAccuracy.${myUserId}`]: state.stats.total > 0 ? (state.stats.fast / state.stats.total) * 100 : 0,
+            [`playerXp.${myUserId}`]: userProfile.xp
         });
     } catch (err) {
         console.error("Score send error:", err);
     }
+}
+
+function calculateStars(accuracy) {
+    if (accuracy >= 99.9) return { stars: 3, isRed: true };
+    if (accuracy >= 85) return { stars: 3, isRed: false };
+    if (accuracy >= 55) return { stars: 2, isRed: false };
+    if (accuracy >= 25) return { stars: 1, isRed: false };
+    return { stars: 0, isRed: false };
 }
 
 window.addEventListener('keydown', e => { 
@@ -824,8 +774,8 @@ window.addEventListener('keydown', e => {
         if(els.levelModal.style.display === 'block') { els.levelModal.style.display = 'none'; els.modeChoiceModal.style.display = 'block'; return; }
         if(els.modeChoiceModal.style.display === 'block') { els.modeChoiceModal.style.display = 'none'; els.bottomMenu.classList.remove('hidden'); return; }
         
-        if(['PLAYING','INTRO','ONLINE_PLAYING'].includes(state.phase)) { backToMainMenu(); return; }
-        if(state.phase === 'RESULTS') { backToMainMenu(); return; }
+        if(['PLAYING','INTRO','ONLINE_PLAYING','ONLINE_WAITING'].includes(state.phase)) { backToMainMenu(); return; }
+        if(state.phase === 'RESULTS' || state.phase === 'ONLINE_RESULTS') { backToMainMenu(); return; }
         if(state.phase === 'MENU') { window.close(); }
     }
 });
@@ -841,14 +791,8 @@ els.btnBackMenu.onclick = backToMainMenu;
 
 els.tabOffline.onclick = () => { selectedMainMode = 'offline'; updateModeTabs(); };
 els.tabOnline.onclick = () => { selectedMainMode = 'online'; updateModeTabs(); };
-els.btnConfirmMode.onclick = () => {
-    els.modeChoiceModal.style.display = 'none';
-    openLevelSelect();
-};
-els.btnBackFromMode.onclick = () => {
-    els.modeChoiceModal.style.display = 'none';
-    els.bottomMenu.classList.remove('hidden');
-};
+els.btnConfirmMode.onclick = () => { els.modeChoiceModal.style.display = 'none'; openLevelSelect(); };
+els.btnBackFromMode.onclick = () => { els.modeChoiceModal.style.display = 'none'; els.bottomMenu.classList.remove('hidden'); };
 
 function updateModeTabs() {
     els.tabOffline.className = selectedMainMode === 'offline' ? 'main-tab active-offline' : 'main-tab';
@@ -891,10 +835,7 @@ function openLevelSelect() {
     resetCursorToCenter(); 
 }
 
-els.btnCloseLevels.onclick = () => { 
-    els.levelModal.style.display = 'none'; 
-    els.modeChoiceModal.style.display = 'block'; 
-};
+els.btnCloseLevels.onclick = () => { els.levelModal.style.display = 'none'; els.modeChoiceModal.style.display = 'block'; };
 
 function renderLevelList() {
     els.levelListContainer.innerHTML = '';
@@ -926,10 +867,7 @@ function renderLevelList() {
     }
 }
 
-els.btnBackFromAction.onclick = () => {
-    els.onlineActionModal.style.display = 'none';
-    els.levelModal.style.display = 'block';
-};
+els.btnBackFromAction.onclick = () => { els.onlineActionModal.style.display = 'none'; els.levelModal.style.display = 'block'; };
 
 els.btnGoCreate.onclick = () => {
     els.onlineActionModal.style.display = 'none';
@@ -944,14 +882,9 @@ els.btnGoFind.onclick = () => {
     fetchServers();
 };
 
-els.btnCancelCreate.onclick = () => {
-    els.createServerModal.style.display = 'none';
-    els.onlineActionModal.style.display = 'block';
-};
+els.btnCancelCreate.onclick = () => { els.createServerModal.style.display = 'none'; els.onlineActionModal.style.display = 'block'; };
 
-els.serverDurationSlider.oninput = (e) => {
-    els.serverDurationVal.textContent = e.target.value + 's';
-};
+els.serverDurationSlider.oninput = (e) => { els.serverDurationVal.textContent = e.target.value + 's'; };
 
 els.btnConfirmCreate.onclick = async () => {
     if (!window.fbDb) return alert("Firebase не подключен");
@@ -966,9 +899,11 @@ els.btnConfirmCreate.onclick = async () => {
             difficulty: selectedDifficulty,
             level: pendingOnlineLevel,
             status: "waiting",
-            players: [{ id: myUserId, nickname: userProfile.nickname || "Host", avatar: userProfile.avatarData, xp: userProfile.xp, ready: false }],
+            players: [{ id: myUserId, nickname: userProfile.nickname || "Host", avatar: userProfile.avatarData, ready: false }],
             playerScores: { [myUserId]: 0 },
             playerAccuracy: { [myUserId]: 0 },
+            playerXp: { [myUserId]: userProfile.xp },
+            playerFinished: {},
             createdAt: window.fbFunctions.serverTimestamp()
         });
         enterLobby(roomRef.id);
@@ -978,23 +913,15 @@ els.btnConfirmCreate.onclick = async () => {
     }
 };
 
-els.btnBackToAction.onclick = () => {
-    els.onlineServerModal.style.display = 'none';
-    els.onlineActionModal.style.display = 'block';
-};
+els.btnBackToAction.onclick = () => { els.onlineServerModal.style.display = 'none'; els.onlineActionModal.style.display = 'block'; };
 
-els.btnCloseOnline.onclick = () => {
-    els.onlineServerModal.style.display = 'none';
-    backToMainMenu();
-};
+els.btnCloseOnline.onclick = () => { els.onlineServerModal.style.display = 'none'; backToMainMenu(); };
 
-els.btnRefreshServers.onclick = () => {
-    fetchServers();
-};
+els.btnRefreshServers.onclick = () => { fetchServers(); };
 
 async function fetchServers() {
     if (!window.fbDb) return;
-    els.serverListContainer.innerHTML = '<div class="empty-text">Загрузка и очистка старых комнат...</div>';
+    els.serverListContainer.innerHTML = '<div class="empty-text">Загрузка...</div>';
     
     try {
         const q = window.fbFunctions.query(
@@ -1025,7 +952,7 @@ async function fetchServers() {
             card.innerHTML = `
                 <div class="server-info">
                     <div class="server-name">${data.name}</div>
-                    <div class="server-details">Lvl ${data.level} | ${data.difficulty} | ${data.duration}s | ${data.players.length}/4</div>
+                    <div class="server-details">Lvl ${data.level} | ${data.difficulty} | ${data.duration}s | ${(data.players||[]).length}/4</div>
                 </div>
                 <button class="join-btn">ВОЙТИ</button>
             `;
@@ -1033,9 +960,7 @@ async function fetchServers() {
             els.serverListContainer.appendChild(card);
         }
         
-        if (!hasActive) {
-            els.serverListContainer.innerHTML = '<div class="empty-text">Нет активных серверов</div>';
-        }
+        if (!hasActive) els.serverListContainer.innerHTML = '<div class="empty-text">Нет активных серверов</div>';
     } catch (err) {
         console.error(err);
         els.serverListContainer.innerHTML = '<div class="empty-text">Ошибка загрузки</div>';
@@ -1056,13 +981,15 @@ async function joinServer(roomId) {
             
             if (data.players.some(p => p.id === myUserId)) return;
 
-            const newPlayer = { id: myUserId, nickname: userProfile.nickname || "Guest", avatar: userProfile.avatarData, xp: userProfile.xp, ready: false };
-            const newScores = { ...data.playerScores, [myUserId]: 0 };
-            const newAccuracy = { ...data.playerAccuracy, [myUserId]: 0 };
+            const newPlayer = { id: myUserId, nickname: userProfile.nickname || "Guest", avatar: userProfile.avatarData, ready: false };
+            const newScores = { ...(data.playerScores || {}), [myUserId]: 0 };
+            const newAccuracy = { ...(data.playerAccuracy || {}), [myUserId]: 0 };
+            const newXp = { ...(data.playerXp || {}), [myUserId]: userProfile.xp };
             transaction.update(ref, {
                 players: [...data.players, newPlayer],
                 playerScores: newScores,
-                playerAccuracy: newAccuracy
+                playerAccuracy: newAccuracy,
+                playerXp: newXp
             });
         });
         enterLobby(roomId);
@@ -1087,48 +1014,64 @@ function listenToRoom(roomId) {
     if (currentRoomListener) currentRoomListener();
     
     const ref = window.fbFunctions.doc(window.fbDb, "servers", roomId);
-    currentRoomListener = window.fbFunctions.onSnapshot(ref, (docSnap) => {
+    currentRoomListener = window.fbFunctions.onSnapshot(ref, async (docSnap) => {
         if (!docSnap.exists()) {
             alert("Комната закрыта");
             leaveLobby();
             return;
         }
         const data = docSnap.data();
-        state.players = data.players;
+        state.players = data.players || [];
         state.playerScores = data.playerScores || {};
         state.playerAccuracy = data.playerAccuracy || {};
+        state.playerXp = data.playerXp || {};
+        state.playerFinished = data.playerFinished || {};
+        state.currentDifficulty = data.difficulty || 'normal';
+        state.currentLevel = data.level || 1;
         isHost = (data.hostId === myUserId);
         
-        els.lobbyRoomName.textContent = data.name;
-        els.lobbyPlayerCount.textContent = `${data.players.length}/4`;
-        els.lobbyPlayersList.innerHTML = '';
-        data.players.forEach(p => {
-            const li = document.createElement('li');
-            li.style.cssText = "padding:5px; border-bottom:1px solid #333; display:flex; justify-content:space-between;";
-            const readyIcon = p.ready ? "✅" : "⏳";
-            const score = state.playerScores[p.id] || 0;
-            li.innerHTML = `<span>${p.nickname} ${readyIcon}</span> <span style="color:#888;font-size:12px;">Score: ${score}</span>`;
-            els.lobbyPlayersList.appendChild(li);
-        });
-        
-        if (isHost && data.status === "waiting") {
-            els.btnHostStart.style.display = 'block';
-            els.lobbyStatusText.textContent = "Вы Хост. Нажмите НАЧАТЬ ИГРУ, когда будете готовы.";
-        } else {
-            els.btnHostStart.style.display = 'none';
-            if(data.status === "starting") els.lobbyStatusText.textContent = "Игра готовится к запуску...";
+        if (state.phase === 'ONLINE_LOBBY' || state.phase === 'ONLINE_READY') {
+            els.lobbyRoomName.textContent = data.name;
+            els.lobbyPlayerCount.textContent = `${data.players.length}/4`;
+            els.lobbyPlayersList.innerHTML = '';
+            data.players.forEach(p => {
+                const li = document.createElement('li');
+                li.style.cssText = "padding:5px; border-bottom:1px solid #333; display:flex; justify-content:space-between;";
+                const readyIcon = p.ready ? "✅" : "⏳";
+                const score = state.playerScores[p.id] || 0;
+                li.innerHTML = `<span>${p.nickname} ${readyIcon}</span> <span style="color:#888;font-size:12px;">Score: ${score}</span>`;
+                els.lobbyPlayersList.appendChild(li);
+            });
+            
+            if (isHost && data.status === "waiting") {
+                els.btnHostStart.style.display = 'block';
+                els.lobbyStatusText.textContent = "Вы Хост. Нажмите НАЧАТЬ ИГРУ.";
+            } else {
+                els.btnHostStart.style.display = 'none';
+                if(data.status === "starting") els.lobbyStatusText.textContent = "Игра готовится к запуску...";
+            }
         }
 
         if (data.status === "starting" && state.phase === 'ONLINE_LOBBY') showReadyPhase();
+        
         if (data.status === "playing") {
             if (state.phase === 'ONLINE_READY') {
                 startOnlineGame(data);
-            } else if (state.phase === 'ONLINE_PLAYING' || state.phase === 'ONLINE_FINISHED') {
-                // Обновляем таблицу лидеров в реальном времени
+            } else if (state.phase === 'ONLINE_PLAYING' || state.phase === 'ONLINE_WAITING') {
                 renderLeaderboard();
+                
+                const allFinished = data.players.every(p => state.playerFinished[p.id] === true);
+                if (allFinished) {
+                    try {
+                        await window.fbFunctions.updateDoc(ref, { status: "finished" });
+                    } catch(e) { /* ignore */ }
+                }
             }
         }
-        if (data.status === "finished" && state.phase !== 'ONLINE_RESULTS') showOnlineResults(data);
+        
+        if (data.status === "finished" && state.phase !== 'ONLINE_RESULTS') {
+            showOnlineResults(data);
+        }
     }, (err) => console.error(err));
 }
 
@@ -1145,6 +1088,7 @@ function leaveLobby() {
     state.phase = 'MENU';
     els.lobbyModal.style.display = 'none';
     els.readyOverlay.style.display = 'none';
+    els.leaderboardHud.classList.remove('active');
     els.onlineServerModal.style.display = 'block';
     fetchServers();
 }
@@ -1163,7 +1107,6 @@ async function markAsReady() {
     amReady = true;
     els.readyText.textContent = "WAITING FOR OTHERS...";
     els.readyCircle.style.borderColor = "#0F0";
-    els.readyCircle.style.boxShadow = "0 0 20px rgba(0,255,0,0.5)";
     
     const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
     await window.fbFunctions.runTransaction(window.fbDb, async (transaction) => {
@@ -1197,23 +1140,27 @@ function renderLeaderboard() {
     }
     els.leaderboardHud.classList.add('active');
     
-    // Собираем данные для каждого игрока
     const playersData = state.players.map(p => {
         let score = state.playerScores[p.id] || 0;
-        // Для локального игрока используем актуальный счёт
-        if (p.id === myUserId && state.phase === 'ONLINE_PLAYING') {
-            score = state.localScore;
+        let xp = state.playerXp[p.id] || 0;
+        
+        if (p.id === myUserId) {
+            if (state.phase === 'ONLINE_PLAYING') {
+                score = state.localScore;
+            }
+            xp = userProfile.xp;
         }
+        
         return {
             id: p.id,
             nickname: p.nickname || 'Anon',
             avatar: p.avatar,
-            xp: p.xp || 0,
-            score: score
+            xp: xp,
+            score: score,
+            finished: state.playerFinished[p.id] === true
         };
     });
     
-    // Сортируем по счёту (убывание)
     playersData.sort((a, b) => b.score - a.score);
     
     els.lbRows.innerHTML = '';
@@ -1223,7 +1170,7 @@ function renderLeaderboard() {
         const level = calculateLevel(p.xp);
         
         const row = document.createElement('div');
-        row.className = `lb-row ${isLocal ? 'is-local' : ''} rank-${rank}`;
+        row.className = `lb-row ${isLocal ? 'is-local' : ''} ${p.finished ? 'is-finished' : ''} rank-${rank}`;
         
         let avatarHtml;
         if (p.avatar) {
@@ -1232,12 +1179,14 @@ function renderLeaderboard() {
             avatarHtml = `<div class="lb-avatar-placeholder">👤</div>`;
         }
         
+        const finishedIcon = p.finished ? '<span class="lb-finished-icon">✓</span>' : '';
+        
         row.innerHTML = `
             <div class="lb-rank">#${rank}</div>
             ${avatarHtml}
             <div class="lb-info">
                 <div class="lb-name-row">
-                    <span class="lb-nick">${p.nickname}</span>
+                    <span class="lb-nick">${p.nickname}${finishedIcon}</span>
                     <span class="lb-level">LVL ${level}</span>
                 </div>
                 <div class="lb-score-row">
@@ -1260,7 +1209,7 @@ function startOnlineGame(roomData) {
     
     const cfg = getLevelConfig(roomData.level, roomData.difficulty);
     state.config = cfg;
-    state.stats = { total: 0, fast: 0, med: 0, slow: 0 };
+    state.stats = { total: 0, fast: 0, med: 0, slow: 0, points: 0 };
     state.levelStartTime = performance.now();
     state.nextSpawnTime = state.levelStartTime + 500;
     state.gameEndTime = state.levelStartTime + (roomData.duration * 1000);
@@ -1271,7 +1220,7 @@ function startOnlineGame(roomData) {
 
 function updateOnlinePlaying(now) {
     const remMs = state.gameEndTime - now;
-    if (remMs <= 0) { endOnlineGame(); return; }
+    if (remMs <= 0) { endOnlineGame(false); return; }
     els.timerDisplay.textContent = (remMs / 1000).toFixed(2) + "s";
     if (now >= state.nextSpawnTime) { spawnWave(); state.nextSpawnTime = now + state.config.spawnInterval; }
     for(let i=state.targets.length-1;i>=0;i--){
@@ -1285,21 +1234,47 @@ function updateOnlinePlaying(now) {
 }
 
 async function endOnlineGame(missed = false) {
-    stopLoop(); clearTargets(); state.phase = 'ONLINE_FINISHED';
+    stopLoop(); 
+    clearTargets(); 
+    state.phase = 'ONLINE_WAITING';
     
-    // Финальная отправка счёта
+    els.statusMsg.textContent = "Ожидание других игроков...";
+    els.statusMsg.style.color = "#DA70D6";
+    
     if (window.fbDb && state.roomId) {
         try {
             const ref = window.fbFunctions.doc(window.fbDb, "servers", state.roomId);
             const accuracy = state.stats.total > 0 ? (state.stats.fast / state.stats.total) * 100 : 0;
             await window.fbFunctions.updateDoc(ref, {
                 [`playerScores.${myUserId}`]: state.localScore,
-                [`playerAccuracy.${myUserId}`]: accuracy
+                [`playerAccuracy.${myUserId}`]: accuracy,
+                [`playerXp.${myUserId}`]: userProfile.xp,
+                [`playerFinished.${myUserId}`]: true
             });
         } catch (err) {
             console.error("Final score send error:", err);
         }
     }
+}
+
+function saveOnlineStars(roomData) {
+    const myAccuracy = (roomData.playerAccuracy && roomData.playerAccuracy[myUserId]) || 0;
+    const starInfo = calculateStars(myAccuracy);
+    const mode = roomData.difficulty || state.currentDifficulty || 'normal';
+    const level = roomData.level || state.currentLevel || 1;
+    
+    const pr = playerProgress.ratings[mode][level];
+    const nr = { stars: starInfo.stars, isRed: starInfo.isRed };
+    
+    if (!pr || starInfo.stars > pr.stars || (starInfo.stars === pr.stars && starInfo.isRed && !pr.isRed)) {
+        playerProgress.ratings[mode][level] = nr;
+    }
+    
+    if (level === playerProgress.unlockedLevel[mode] && level < TOTAL_LEVELS) {
+        playerProgress.unlockedLevel[mode]++;
+    }
+    
+    saveProgress();
 }
 
 function showOnlineResults(roomData) {
@@ -1309,34 +1284,54 @@ function showOnlineResults(roomData) {
     els.leaderboardHud.classList.remove('active');
     els.onlineResultsScreen.style.display = 'block';
     
-    const playersData = roomData.players.map(p => ({
-        nickname: p.nickname,
-        score: (roomData.playerScores && roomData.playerScores[p.id]) || 0,
-        accuracy: (roomData.playerAccuracy && roomData.playerAccuracy[p.id]) || 0
-    }));
+    saveOnlineStars(roomData);
+    
+    const playersData = roomData.players.map(p => {
+        const score = (roomData.playerScores && roomData.playerScores[p.id]) || 0;
+        const accuracy = (roomData.playerAccuracy && roomData.playerAccuracy[p.id]) || 0;
+        const starInfo = calculateStars(accuracy);
+        return {
+            nickname: p.nickname,
+            score: score,
+            accuracy: accuracy,
+            stars: starInfo.stars,
+            isRed: starInfo.isRed
+        };
+    });
     
     const sorted = [...playersData].sort((a,b) => b.score - a.score);
     els.onlineLeaderboard.innerHTML = '';
     sorted.forEach((p, index) => {
         const tr = document.createElement('tr');
-        let rankClass = "";
-        if(index === 0) rankClass = "color:#FFD700; font-weight:bold;"; 
-        else if(index === 1) rankClass = "color:#C0C0C0;"; 
-        else if(index === 2) rankClass = "color:#CD7F32;";
+        let rankStyle = "";
+        if(index === 0) rankStyle = "color:#FFD700; font-weight:bold;"; 
+        else if(index === 1) rankStyle = "color:#C0C0C0;"; 
+        else if(index === 2) rankStyle = "color:#CD7F32;";
+        
+        let starsHtml = '';
+        for(let i = 1; i <= 3; i++) {
+            let c = '#333', sh = 'none';
+            if(i <= p.stars) {
+                if(p.isRed) { c = '#F00'; sh = '0 0 10px #F00'; }
+                else if(p.stars === 3) { c = '#FFD700'; sh = '0 0 10px #FFD700'; }
+                else if(p.stars === 2) { c = '#C0C0C0'; sh = '0 0 10px #C0C0C0'; }
+                else if(p.stars === 1) { c = '#CD7F32'; sh = '0 0 10px #CD7F32'; }
+            }
+            starsHtml += `<span class="result-star" style="color:${c};text-shadow:${sh};">★</span>`;
+        }
+        
         tr.innerHTML = `
-            <td style="padding:10px; border-bottom:1px solid #222; ${rankClass}">${index + 1}</td>
+            <td style="padding:10px; border-bottom:1px solid #222; ${rankStyle}">${index + 1}</td>
             <td style="padding:10px; border-bottom:1px solid #222;">${p.nickname}</td>
             <td style="padding:10px; border-bottom:1px solid #222;">${p.score}</td>
+            <td style="padding:10px; border-bottom:1px solid #222; text-align:center;">${starsHtml}</td>
             <td style="padding:10px; border-bottom:1px solid #222;">${p.accuracy.toFixed(1)}%</td>
         `;
         els.onlineLeaderboard.appendChild(tr);
     });
 }
 
-els.btnBackToMainFromRes.onclick = () => {
-    els.onlineResultsScreen.style.display = 'none';
-    backToMainMenu();
-};
+els.btnBackToMainFromRes.onclick = () => { els.onlineResultsScreen.style.display = 'none'; backToMainMenu(); };
 
 function getLevelConfig(lvl, mode) {
     const f = (lvl-1)/(TOTAL_LEVELS-1);
@@ -1354,7 +1349,8 @@ let state = {
     targets: [], animationId: null, config: null, stats: {}, 
     frameCount: 0, lastFpsUpdate: 0, currentFps: 0, 
     roomId: null, players: [], localScore: 0,
-    playerScores: {}, playerAccuracy: {}
+    playerScores: {}, playerAccuracy: {}, playerXp: {}, playerFinished: {},
+    currentDifficulty: 'normal'
 };
 
 function showGameUI() { 
@@ -1371,6 +1367,7 @@ function hideGameUI() {
     els.readyOverlay.style.display = 'none'; 
     els.sensIndicator.style.opacity = '0'; 
     els.leaderboardHud.classList.remove('active');
+    els.statusMsg.textContent = "";
 }
 function backToMainMenu() { 
     stopLoop(); 
@@ -1398,7 +1395,7 @@ function hideAllModals() {
 function startIntroSequence(lvl, mode) {
     state.currentLevel = lvl; state.currentMode = mode; 
     state.config = getLevelConfig(lvl, mode); 
-    state.stats = {total:0,fast:0,med:0,slow:0,missed:false}; 
+    state.stats = {total:0,fast:0,med:0,slow:0,missed:false,points:0}; 
     state.phase = 'INTRO'; 
     hideAllModals(); 
     showGameUI();
@@ -1476,12 +1473,12 @@ function showResults(stars, survived, isRed) {
     }
     els.resultStars.innerHTML = ss;
     const acc = state.stats.total>0?((state.stats.fast/state.stats.total)*100).toFixed(1):0;
-    els.resultStats.innerHTML = `Режим: ${state.currentMode.toUpperCase()}<br>Всего: ${state.stats.total}<br>Быстрых: ${state.stats.fast}<br>Средних: ${state.stats.med}<br>Медленных: ${state.stats.slow}<br>Точность: ${acc}%`;
+    els.resultStats.innerHTML = `Режим: ${state.currentMode.toUpperCase()}<br>Всего: ${state.stats.total}<br>Быстрых: ${state.stats.fast}<br>Средних: ${state.stats.med}<br>Медленных: ${state.stats.slow}<br>Очков: ${state.stats.points || 0}<br>Точность: ${acc}%`;
     els.btnNext.style.display = (survived && state.currentLevel<TOTAL_LEVELS)?'inline-block':'none';
 }
 
 function loop(ts) {
-    if(state.phase!=='INTRO'&&state.phase!=='PLAYING'&&state.phase!=='ONLINE_WAITING'&&state.phase!=='ONLINE_PLAYING') return;
+    if(!['INTRO','PLAYING','ONLINE_WAITING','ONLINE_PLAYING'].includes(state.phase)) return;
     state.animationId = requestAnimationFrame(loop);
     const fi = 1000/userSettings.fpsLimit, el = ts-state.lastFrameTime;
     if(el<fi) return;
@@ -1534,9 +1531,7 @@ function spawnWave(){
     const c = state.config;
     const now = performance.now();
     const ac = state.targets.filter(t => !t.dead).length;
-    if(ac < c.maxTargets) { 
-        createTargetSafe(c.lifetime, c.targetSize, now); 
-    }
+    if(ac < c.maxTargets) { createTargetSafe(c.lifetime, c.targetSize, now); }
 }
 function createTargetSafe(lt, sz, st){
     const pad = 50; 
@@ -1569,7 +1564,6 @@ function createTargetAt(x, y, lt, sz, st){
     el.style.height = sz + 'px';
     el.style.left = x + 'px'; 
     el.style.top = y + 'px';
-    // spawnTime фиксируется точно в момент создания этого конкретного круга
     const d = {el, spawnTime: st, expireTime: st + lt, totalLife: lt, dead: false, id: Symbol(), visualScale: 1};
     state.targets.push(d);
     els.gameArea.appendChild(el);
@@ -1611,19 +1605,10 @@ els.soundToggle.onchange = e => { userSettings.soundEnabled = e.target.checked; 
 els.volumeSlider.oninput = e => { userSettings.volume = +e.target.value; els.volumeVal.textContent = userSettings.volume+'%'; saveSettings(); };
 els.fpsLimitSelect.onchange = e => { userSettings.fpsLimit = +e.target.value; saveSettings(); };
 
-// --- СПИСОК ДРУЗЕЙ ---
-function loadFriends() {
-    const s = localStorage.getItem('pcg_friends_v1');
-    return s ? JSON.parse(s) : [];
-}
-function saveFriends() {
-    localStorage.setItem('pcg_friends_v1', JSON.stringify(friendsList));
-}
+function loadFriends() { const s = localStorage.getItem('pcg_friends_v1'); return s ? JSON.parse(s) : []; }
+function saveFriends() { localStorage.setItem('pcg_friends_v1', JSON.stringify(friendsList)); }
 function renderFriends() {
-    if (friendsList.length === 0) {
-        els.friendsListContainer.innerHTML = '<div class="empty-text">Список друзей пуст</div>';
-        return;
-    }
+    if (friendsList.length === 0) { els.friendsListContainer.innerHTML = '<div class="empty-text">Список друзей пуст</div>'; return; }
     els.friendsListContainer.innerHTML = '';
     friendsList.forEach((friend, index) => {
         const card = document.createElement('div');
@@ -1636,32 +1621,19 @@ function renderFriends() {
             </div>
             <button class="remove-friend" data-index="${index}">УДАЛИТЬ</button>
         `;
-        card.querySelector('.remove-friend').onclick = () => {
-            friendsList.splice(index, 1);
-            saveFriends();
-            renderFriends();
-        };
+        card.querySelector('.remove-friend').onclick = () => { friendsList.splice(index, 1); saveFriends(); renderFriends(); };
         els.friendsListContainer.appendChild(card);
     });
 }
 
-els.btnFriends.onclick = () => {
-    renderFriends();
-    els.friendsModal.style.display = 'block';
-};
+els.btnFriends.onclick = () => { renderFriends(); els.friendsModal.style.display = 'block'; };
 els.btnCloseFriends.onclick = () => els.friendsModal.style.display = 'none';
 
 els.btnAddFriend.onclick = () => {
     const nick = els.friendNickInput.value.trim();
     if (!nick) return;
-    if (friendsList.some(f => f.nickname.toLowerCase() === nick.toLowerCase())) {
-        alert("Этот друг уже в списке");
-        return;
-    }
-    if (friendsList.length >= 20) {
-        alert("Максимум 20 друзей");
-        return;
-    }
+    if (friendsList.some(f => f.nickname.toLowerCase() === nick.toLowerCase())) { alert("Этот друг уже в списке"); return; }
+    if (friendsList.length >= 20) { alert("Максимум 20 друзей"); return; }
     const today = new Date();
     const dateStr = `${today.getDate().toString().padStart(2,'0')}.${(today.getMonth()+1).toString().padStart(2,'0')}.${today.getFullYear()}`;
     friendsList.push({ nickname: nick, addedDate: dateStr });
@@ -1670,18 +1642,13 @@ els.btnAddFriend.onclick = () => {
     renderFriends();
 };
 
-// --- CROP ---
 let cropState = { img: null, x: 0, y: 0, scale: 1, isDragging: false, lastMouseX: 0, lastMouseY: 0, canvasCtx: null };
 els.avatarTrigger.onclick = () => els.fileInput.click();
 els.fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
-        const img = new Image();
-        img.onload = () => initCropEditor(img);
-        img.src = evt.target.result;
-    };
+    reader.onload = (evt) => { const img = new Image(); img.onload = () => initCropEditor(img); img.src = evt.target.result; };
     reader.readAsDataURL(file);
     els.fileInput.value = ''; 
 };
@@ -1750,7 +1717,6 @@ function confirmCrop() {
 }
 els.btnConfirmCrop.onclick = confirmCrop;
 
-// Init
 applyCursorStyle(); 
 updateProfileUI(); 
 backToMainMenu();
