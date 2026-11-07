@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fixed Movement - Infinite World</title>
+    <title>Chess Online - Sergey Edition</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -33,351 +34,606 @@
             console.error("❌ Error:", e);
         }
 
-        class FixedGame {
+        // --- ЛОГИКА ШАХМАТ ---
+        class ChessLogic {
+            constructor() {
+                this.board = this.createInitialBoard();
+                this.turn = 'white'; // white или black
+                this.selectedPiece = null;
+                this.validMoves = [];
+            }
+
+            createInitialBoard() {
+                // 8x8 массив. null = пусто. Объект = фигура {type, color}
+                const b = Array(8).fill(null).map(() => Array(8).fill(null));
+                
+                const setupRow = (row, color, types) => {
+                    types.forEach((type, col) => {
+                        b[row][col] = { type, color };
+                    });
+                };
+
+                const backRank = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'];
+                const pawnRank = Array(8).fill('pawn');
+
+                setupRow(0, 'black', backRank);
+                setupRow(1, 'black', pawnRank);
+                setupRow(6, 'white', pawnRank);
+                setupRow(7, 'white', backRank);
+
+                return b;
+            }
+
+            // Проверка, находится ли клетка на доске
+            isValidPos(r, c) {
+                return r >= 0 && r < 8 && c >= 0 && c < 8;
+            }
+
+            // Получить все возможные ходы для конкретной фигуры (без учета шаха короля)
+            getPseudoLegalMoves(board, r, c) {
+                const piece = board[r][c];
+                if (!piece) return [];
+                
+                const moves = [];
+                const { type, color } = piece;
+                const directions = {
+                    rook: [[0,1],[0,-1],[1,0],[-1,0]],
+                    bishop: [[1,1],[1,-1],[-1,1],[-1,-1]],
+                    queen: [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]],
+                    king: [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]],
+                    knight: [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]]
+                };
+
+                const addMoveIfValid = (nr, nc) => {
+                    if (this.isValidPos(nr, nc)) {
+                        const target = board[nr][nc];
+                        if (!target || target.color !== color) {
+                            moves.push({ r: nr, c: nc });
+                            return true; // Продолжать скольжение (для ладьи/слона/ферзя)
+                        } else {
+                            return false; // Столкновение со своей фигурой
+                        }
+                    }
+                    return false; // Выход за границы
+                };
+
+                if (type === 'pawn') {
+                    const dir = color === 'white' ? -1 : 1;
+                    const startRow = color === 'white' ? 6 : 1;
+                    
+                    // Ход вперед
+                    if (this.isValidPos(r + dir, c) && !board[r + dir][c]) {
+                        moves.push({ r: r + dir, c: c });
+                        // Двойной ход с начальной позиции
+                        if (r === startRow && this.isValidPos(r + dir * 2, c) && !board[r + dir * 2][c]) {
+                            moves.push({ r: r + dir * 2, c: c });
+                        }
+                    }
+                    // Взятие
+                    [[dir, 1], [dir, -1]].forEach(([dr, dc]) => {
+                        const nr = r + dr, nc = c + dc;
+                        if (this.isValidPos(nr, nc)) {
+                            const target = board[nr][nc];
+                            if (target && target.color !== color) {
+                                moves.push({ r: nr, c: nc });
+                            }
+                        }
+                    });
+                } else if (['rook', 'bishop', 'queen'].includes(type)) {
+                    directions[type].forEach(([dr, dc]) => {
+                        let nr = r + dr, nc = c + dc;
+                        while (addMoveIfValid(nr, nc)) {
+                            nr += dr;
+                            nc += dc;
+                        }
+                    });
+                } else if (type === 'king') {
+                    directions.king.forEach(([dr, dc]) => {
+                        addMoveIfValid(r + dr, c + dc);
+                    });
+                } else if (type === 'knight') {
+                    directions.knight.forEach(([dr, dc]) => {
+                        addMoveIfValid(r + dr, c + dc);
+                    });
+                }
+
+                return moves;
+            }
+
+            // Фильтрация ходов: нельзя оставлять своего короля под боем
+            filterLegalMoves(board, fromR, fromC) {
+                const pseudoMoves = this.getPseudoLegalMoves(board, fromR, fromC);
+                const legalMoves = [];
+                const pieceColor = board[fromR][fromC].color;
+
+                for (const move of pseudoMoves) {
+                    // Создаем копию доски
+                    const tempBoard = JSON.parse(JSON.stringify(board));
+                    
+                    // Выполняем ход на копии
+                    const captured = tempBoard[move.r][move.c];
+                    tempBoard[move.r][move.c] = tempBoard[fromR][fromC];
+                    tempBoard[fromR][fromC] = null;
+                    
+                    // Продвижение пешки (превращение упрощено до ферзя для демо, или оставляем как есть)
+                    if (tempBoard[move.r][move.c].type === 'pawn') {
+                        if ((pieceColor === 'white' && move.r === 0) || (pieceColor === 'black' && move.r === 7)) {
+                            tempBoard[move.r][move.c].type = 'queen'; // Автоматическое превращение
+                        }
+                    }
+
+                    // Проверяем, атакован ли наш король на этой новой доске
+                    if (!this.isKingInCheck(tempBoard, pieceColor)) {
+                        legalMoves.push(move);
+                    }
+                }
+
+                return legalMoves;
+            }
+
+            isKingInCheck(board, color) {
+                // Найти короля
+                let kingPos = null;
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        if (board[r][c] && board[r][c].type === 'king' && board[r][c].color === color) {
+                            kingPos = { r, c };
+                            break;
+                        }
+                    }
+                    if (kingPos) break;
+                }
+                if (!kingPos) return false; // Король съеден (ошибка состояния)
+
+                // Проверить, бьет ли какая-либо вражеская фигура эту позицию
+                const enemyColor = color === 'white' ? 'black' : 'white';
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        if (board[r][c] && board[r][c].color === enemyColor) {
+                            const moves = this.getPseudoLegalMoves(board, r, c);
+                            if (moves.some(m => m.r === kingPos.r && m.c === kingPos.c)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            }
+
+            makeMove(fromR, fromC, toR, toC) {
+                const piece = this.board[fromR][fromC];
+                if (!piece) return false;
+
+                const validMoves = this.filterLegalMoves(this.board, fromR, fromC);
+                const isValid = validMoves.some(m => m.r === toR && m.c === toC);
+
+                if (!isValid) return false;
+
+                // Выполнить ход
+                this.board[toR][toC] = piece;
+                this.board[fromR][fromC] = null;
+                
+                // Смена хода
+                this.turn = this.turn === 'white' ? 'black' : 'white';
+                
+                // Сброс выбора
+                this.selectedPiece = null;
+                this.validMoves = [];
+
+                return true;
+            }
+        }
+
+        // --- ИГРОВОЙ ПРИЛОЖЕНИЕ ---
+        class ChessApp {
             constructor() {
                 this.db = db;
                 this.playerId = crypto.randomUUID();
                 this.roomId = null;
+                this.myColor = null; // 'white' or 'black'
+                this.gameState = new ChessLogic();
+                this.remoteBoard = null;
+                this.remoteTurn = null;
                 
-                // Состояние игры
-                this.gameActive = false;
-                this.remotePlayers = []; // Данные из базы
-                
-                // Локальное состояние моего игрока (для плавного движения без лагов сети)
-                this.myLocalPos = { x: 0, y: 0 };
-                this.myVelocity = { x: 0, y: 0 };
-                
-                // Камера
-                this.camX = 0;
-                this.camY = 0;
-
-                // Canvas
-                this.canvas = document.getElementById('game-canvas');
+                this.canvas = document.getElementById('chess-board');
                 this.ctx = this.canvas.getContext('2d');
                 
-                // Input
-                this.keys = {};
-                this.speed = 8; // Скорость движения
+                this.cellSize = 60;
+                this.padding = 20;
                 
-                // Network Throttle
-                this.lastSendTime = 0;
-                this.sendInterval = 30; // Отправлять каждые 30мс для большей плавности
-
                 this.initInput();
-                this.resize();
-                window.addEventListener('resize', () => this.resize());
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
             }
 
-            resize() {
-                const dpr = window.devicePixelRatio || 1;
-                this.canvas.width = window.innerWidth * dpr;
-                this.canvas.height = window.innerHeight * dpr;
-                this.ctx.scale(dpr, dpr);
-                this.w = window.innerWidth;
-                this.h = window.innerHeight;
+            resizeCanvas() {
+                const size = this.cellSize * 8 + this.padding * 2;
+                this.canvas.width = size;
+                this.canvas.height = size;
+                this.render();
             }
 
             initInput() {
-                window.addEventListener('keydown', (e) => {
-                    this.keys[e.key.toLowerCase()] = true;
-                    if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault();
-                });
-                window.addEventListener('keyup', (e) => {
-                    this.keys[e.key.toLowerCase()] = false;
+                this.canvas.addEventListener('click', (e) => {
+                    if (!this.roomId || !this.myColor) return;
+                    
+                    // Только если моя очередь
+                    if (this.remoteTurn !== this.myColor) return;
+
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left - this.padding;
+                    const y = e.clientY - rect.top - this.padding;
+                    
+                    const col = Math.floor(x / this.cellSize);
+                    const row = Math.floor(y / this.cellSize);
+
+                    if (col < 0 || col > 7 || row < 0 || row > 7) return;
+
+                    this.handleSquareClick(row, col);
                 });
             }
 
-            async joinOrCreate() {
+            handleSquareClick(r, c) {
+                const piece = this.gameState.board[r][c];
+
+                // Если выбрали фигуру ранее
+                if (this.gameState.selectedPiece) {
+                    const { r: sr, c: sc } = this.gameState.selectedPiece;
+                    
+                    // Попытка хода
+                    if (sr === r && sc === c) {
+                        // Отмена выбора
+                        this.gameState.selectedPiece = null;
+                        this.gameState.validMoves = [];
+                        this.render();
+                        return;
+                    }
+
+                    const moved = this.gameState.makeMove(sr, sc, r, c);
+                    if (moved) {
+                        this.syncToServer();
+                    } else {
+                        // Неверный ход, сброс
+                        this.gameState.selectedPiece = null;
+                        this.gameState.validMoves = [];
+                        this.render();
+                    }
+                    return;
+                }
+
+                // Выбор новой фигуры
+                if (piece && piece.color === this.myColor) {
+                    this.gameState.selectedPiece = { r, c };
+                    this.gameState.validMoves = this.gameState.filterLegalMoves(this.gameState.board, r, c);
+                    this.render();
+                }
+            }
+
+            async syncToServer() {
+                if (!this.roomId) return;
+                
+                // Глубокая копия доски для отправки
+                const boardCopy = JSON.parse(JSON.stringify(this.gameState.board));
+                const turnCopy = this.gameState.turn;
+
+                await updateDoc(doc(this.db, "rooms", this.roomId), {
+                    board: boardCopy,
+                    turn: turnCopy,
+                    lastUpdate: serverTimestamp()
+                }).catch(err => console.error("Sync error", err));
+            }
+
+            async joinOrCreate(mode, codeInput = "") {
                 document.getElementById('ui').style.display = 'none';
+                document.getElementById('game-ui').style.display = 'block';
                 
                 try {
-                    // Ищем комнату с менее чем 4 игроками
-                    const q = query(collection(this.db, "rooms"), where("count", "<", 4), limit(1));
-                    const snapshot = await getDocs(q);
-
-                    if (!snapshot.empty) {
-                        const roomDoc = snapshot.docs[0];
-                        this.roomId = roomDoc.id;
-                        await this.joinRoom(roomDoc.data().players);
-                    } else {
-                        // Создаем новую
-                        const newPlayer = { id: this.playerId, x: 0, y: 0 };
+                    if (mode === 'create') {
+                        // Создаем комнату
+                        const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+                        const initialState = new ChessLogic();
+                        
                         const docRef = await addDoc(collection(this.db, "rooms"), {
-                            players: [newPlayer],
-                            count: 1,
+                            code: code,
+                            status: "waiting",
+                            players: [{ id: this.playerId, color: 'white' }], // Первый всегда белый
+                            board: initialState.board,
+                            turn: 'white',
                             createdAt: serverTimestamp()
                         });
+                        
                         this.roomId = docRef.id;
-                        this.myLocalPos = { x: 0, y: 0 };
+                        this.myColor = 'white';
+                        this.startListening();
+                        
+                    } else if (mode === 'join_code') {
+                        const upperCode = codeInput.toUpperCase();
+                        const q = query(collection(this.db, "rooms"), where("code", "==", upperCode), limit(1));
+                        const snapshot = await getDocs(q);
+                        
+                        if (snapshot.empty) throw new Error("Комната не найдена");
+                        
+                        const roomDoc = snapshot.docs[0];
+                        const data = roomDoc.data();
+                        
+                        if (data.players.length >= 2) throw new Error("Игра уже началась");
+                        if (data.status !== 'waiting') throw new Error("Комната закрыта");
+
+                        // Присоединяемся как черный
+                        await runTransaction(this.db, async (transaction) => {
+                            const ref = doc(this.db, "rooms", roomDoc.id);
+                            transaction.update(ref, {
+                                players: [...data.players, { id: this.playerId, color: 'black' }],
+                                status: 'playing'
+                            });
+                        });
+
+                        this.roomId = roomDoc.id;
+                        this.myColor = 'black';
+                        this.startListening();
+
+                    } else if (mode === 'quick_match') {
+                        // Поиск свободной комнаты
+                        const q = query(collection(this.db, "rooms"), where("status", "==", "waiting"), limit(1));
+                        const snapshot = await getDocs(q);
+
+                        if (!snapshot.empty) {
+                            // Зашли в существующую (как черные)
+                            const roomDoc = snapshot.docs[0];
+                            const data = roomDoc.data();
+                            
+                            await runTransaction(this.db, async (transaction) => {
+                                const ref = doc(this.db, "rooms", roomDoc.id);
+                                transaction.update(ref, {
+                                    players: [...data.players, { id: this.playerId, color: 'black' }],
+                                    status: 'playing'
+                                });
+                            });
+                            this.roomId = roomDoc.id;
+                            this.myColor = 'black';
+                        } else {
+                            // Создали новую (как белые)
+                            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+                            const initialState = new ChessLogic();
+                            const docRef = await addDoc(collection(this.db, "rooms"), {
+                                code: code,
+                                status: "waiting",
+                                players: [{ id: this.playerId, color: 'white' }],
+                                board: initialState.board,
+                                turn: 'white',
+                                createdAt: serverTimestamp()
+                            });
+                            this.roomId = docRef.id;
+                            this.myColor = 'white';
+                        }
                         this.startListening();
                     }
+
                 } catch (err) {
-                    alert("Ошибка сети: " + err.message);
+                    alert("Ошибка: " + err.message);
                     location.reload();
                 }
             }
 
-            async joinRoom(currentPlayers) {
-                await runTransaction(this.db, async (transaction) => {
-                    const ref = doc(this.db, "rooms", this.roomId);
-                    const snap = await transaction.get(ref);
-                    if (!snap.exists()) throw new Error("Комната исчезла");
-                    
-                    const data = snap.data();
-                    if (data.count >= 4) throw new Error("Комната полна");
-
-                    // Спавнимся рядом с центром или случайно
-                    const offset = Math.random() * 100 - 50;
-                    const newMe = { id: this.playerId, x: offset, y: offset };
-                    
-                    transaction.update(ref, {
-                        players: [...data.players, newMe],
-                        count: data.players.length + 1
-                    });
-                });
-                
-                // Инициализируем локальную позицию тем же значением
-                const meInDb = currentPlayers.find(p => p.id === this.playerId);
-                if(meInDb) {
-                    this.myLocalPos = { x: meInDb.x, y: meInDb.y };
-                } else {
-                    this.myLocalPos = { x: 0, y: 0 };
-                }
-
-                this.startListening();
-            }
-
             startListening() {
-                this.gameActive = true;
-                this.canvas.style.display = 'block';
-                
-                // Слушаем изменения комнаты
                 onSnapshot(doc(this.db, "rooms", this.roomId), (docSnap) => {
-                    if (!docSnap.exists()) {
-                        alert("Комната закрыта");
-                        location.reload();
-                        return;
+                    if (!docSnap.exists()) return;
+                    const data = docSnap.data();
+                    
+                    // Обновляем локальное состояние из базы
+                    this.gameState.board = data.board;
+                    this.gameState.turn = data.turn;
+                    this.remoteTurn = data.turn;
+                    
+                    // Определяем свою роль заново (на случай перезагрузки)
+                    const me = data.players.find(p => p.id === this.playerId);
+                    if (me) this.myColor = me.color;
+
+                    this.render();
+                    
+                    // Обновление статуса игры
+                    if (data.status === 'playing') {
+                        document.getElementById('game-status').textContent = `Ваш цвет: ${this.myColor === 'white' ? 'Белые' : 'Черные'} | Очередь: ${data.turn === 'white' ? 'Белых' : 'Черных'}`;
+                    } else {
+                        document.getElementById('game-status').textContent = `Ожидание соперника... Код: ${data.code}`;
                     }
-                    // Обновляем список ДРУГИХ игроков (или всех, но свою позицию игнорируем при рендере)
-                    this.remotePlayers = docSnap.data().players;
+
                 }, (err) => {
                     console.error(err);
                 });
-                
-                this.loop();
             }
 
-            loop() {
-                if (!this.gameActive) return;
-
-                // 1. ОБРАБОТКА ВВОДА И ЛОКАЛЬНОЕ ДВИЖЕНИЕ
-                // Это происходит мгновенно, независимо от сети
-                let dx = 0;
-                let dy = 0;
-                if (this.keys['w'] || this.keys['arrowup']) dy -= 1;
-                if (this.keys['s'] || this.keys['arrowdown']) dy += 1;
-                if (this.keys['a'] || this.keys['arrowleft']) dx -= 1;
-                if (this.keys['d'] || this.keys['arrowright']) dx += 1;
-
-                // Нормализация диагонального движения
-                if (dx !== 0 && dy !== 0) {
-                    const length = Math.sqrt(dx*dx + dy*dy);
-                    dx /= length;
-                    dy /= length;
-                }
-
-                // Применяем скорость
-                this.myLocalPos.x += dx * this.speed;
-                this.myLocalPos.y += dy * this.speed;
-
-                // ОТПРАВКА ПОЗИЦИИ В БАЗУ (Throttled)
-                const now = Date.now();
-                if (now - this.lastSendTime > this.sendInterval) {
-                    this.updateMyPos(this.myLocalPos.x, this.myLocalPos.y);
-                    this.lastSendTime = now;
-                }
-
-                // 2. ОБНОВЛЕНИЕ КАМЕРЫ
-                // Камера всегда следует за нашей ЛОКАЛЬНОЙ позицией (чтобы не было тряски)
-                this.camX += (this.myLocalPos.x - this.camX) * 0.1;
-                this.camY += (this.myLocalPos.y - this.camY) * 0.1;
-
-                // 3. РЕНДЕРИНГ
+            render() {
                 const ctx = this.ctx;
-                const w = this.w;
-                const h = this.h;
+                const cs = this.cellSize;
+                const pad = this.padding;
+                
+                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, w, h);
+                // Рисуем доску
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        const x = pad + c * cs;
+                        const y = pad + r * cs;
+                        
+                        // Цвет клетки
+                        const isLight = (r + c) % 2 === 0;
+                        ctx.fillStyle = isLight ? '#eeeed2' : '#769656';
+                        ctx.fillRect(x, y, cs, cs);
 
-                // Координаты экрана для центра камеры
-                const screenCenterX = w / 2;
-                const screenCenterY = h / 2;
+                        // Подсветка выбранной фигуры
+                        if (this.gameState.selectedPiece && 
+                            this.gameState.selectedPiece.r === r && 
+                            this.gameState.selectedPiece.c === c) {
+                            ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
+                            ctx.fillRect(x, y, cs, cs);
+                        }
 
-                // Функция перевода мировых координат в экранные
-                const worldToScreen = (wx, wy) => {
-                    return {
-                        x: wx - this.camX + screenCenterX,
-                        y: wy - this.camY + screenCenterY
-                    };
+                        // Подсветка возможных ходов
+                        if (this.gameState.validMoves.some(m => m.r === r && m.c === c)) {
+                            ctx.beginPath();
+                            ctx.arc(x + cs/2, y + cs/2, cs/6, 0, Math.PI*2);
+                            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                            ctx.fill();
+                        }
+
+                        // Рисуем фигуру
+                        const piece = this.gameState.board[r][c];
+                        if (piece) {
+                            this.drawPiece(ctx, x, y, cs, piece);
+                        }
+                    }
+                }
+            }
+
+            drawPiece(ctx, x, y, size, piece) {
+                const centerX = x + size / 2;
+                const centerY = y + size / 2;
+                const radius = size * 0.35;
+
+                ctx.font = `${size * 0.6}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Unicode символы шахмат
+                const symbols = {
+                    white: { k:'♔', q:'♕', r:'♖', b:'♗', n:'♘', p:'♙' },
+                    black: { k:'♚', q:'♛', r:'♜', b:'♝', n:'♞', p:'♟' }
                 };
 
-                // Рисование сетки
-                this.drawGrid(ctx, worldToScreen);
-
-                // Рисование центра мира (0,0)
-                this.drawCenterCross(ctx, worldToScreen);
-
-                // Рисование других игроков
-                this.remotePlayers.forEach(p => {
-                    if (p.id === this.playerId) return; // Себя рисуем отдельно
-
-                    const pos = worldToScreen(p.x, p.y);
-                    
-                    // Оптимизация: рисуем только если видно на экране
-                    if (pos.x > -50 && pos.x < w + 50 && pos.y > -50 && pos.y < h + 50) {
-                        ctx.beginPath();
-                        ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
-                        ctx.fillStyle = '#ff4444'; // Красный для других
-                        ctx.fill();
-                        ctx.strokeStyle = '#fff';
-                        ctx.lineWidth = 1;
-                        ctx.stroke();
-                        
-                        // Текст имени
-                        ctx.fillStyle = '#aaa';
-                        ctx.font = '10px Arial';
-                        ctx.textAlign = 'center';
-                        ctx.fillText("Other", pos.x, pos.y - 15);
-                    }
-                });
-
-                // Рисование СЕБЯ (белый квадрат/круг)
-                const myScreenPos = worldToScreen(this.myLocalPos.x, this.myLocalPos.y);
-                ctx.beginPath();
-                ctx.arc(myScreenPos.x, myScreenPos.y, 12, 0, Math.PI * 2);
-                ctx.fillStyle = '#fff'; // Белый для меня
-                ctx.shadowColor = '#fff';
-                ctx.shadowBlur = 10;
-                ctx.fill();
-                ctx.shadowBlur = 0; // Сброс тени
-                ctx.strokeStyle = '#000';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                requestAnimationFrame(() => this.loop());
-            }
-
-            drawGrid(ctx, worldToScreen) {
-                const gridSize = 100;
-                ctx.strokeStyle = '#222';
+                ctx.fillStyle = piece.color === 'white' ? '#fff' : '#000';
+                // Обводка для контраста
+                ctx.strokeStyle = piece.color === 'white' ? '#000' : '#fff';
                 ctx.lineWidth = 1;
-                ctx.beginPath();
 
-                // Вычисляем границы видимой области в мировых координатах
-                const viewLeft = this.camX - this.w / 2;
-                const viewTop = this.camY - this.h / 2;
-                const viewRight = this.camX + this.w / 2;
-                const viewBottom = this.camY + this.h / 2;
-
-                // Вертикальные линии
-                let startX = Math.floor(viewLeft / gridSize) * gridSize;
-                for (let x = startX; x <= viewRight; x += gridSize) {
-                    const s1 = worldToScreen(x, viewTop);
-                    const s2 = worldToScreen(x, viewBottom);
-                    ctx.moveTo(s1.x, s1.y);
-                    ctx.lineTo(s2.x, s2.y);
-                }
-
-                // Горизонтальные линии
-                let startY = Math.floor(viewTop / gridSize) * gridSize;
-                for (let y = startY; y <= viewBottom; y += gridSize) {
-                    const s1 = worldToScreen(viewLeft, y);
-                    const s2 = worldToScreen(viewRight, y);
-                    ctx.moveTo(s1.x, s1.y);
-                    ctx.lineTo(s2.x, s2.y);
-                }
+                const char = symbols[piece.color][piece.type.charAt(0)];
                 
-                ctx.stroke();
-            }
-
-            drawCenterCross(ctx, worldToScreen) {
-                const pos = worldToScreen(0, 0);
-                
-                // Проверяем видимость
-                if (pos.x > -50 && pos.x < this.w + 50 && pos.y > -50 && pos.y < this.h + 50) {
-                    ctx.strokeStyle = '#ff0000';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(pos.x - 20, pos.y);
-                    ctx.lineTo(pos.x + 20, pos.y);
-                    ctx.moveTo(pos.x, pos.y - 20);
-                    ctx.lineTo(pos.x, pos.y + 20);
-                    ctx.stroke();
-                    
-                    ctx.fillStyle = '#ff0000';
-                    ctx.font = 'bold 12px monospace';
-                    ctx.textAlign = 'center';
-                    ctx.fillText("CENTER (0,0)", pos.x, pos.y + 30);
-                }
-            }
-
-            updateMyPos(x, y) {
-                // Используем транзакцию для безопасной записи
-                runTransaction(this.db, async (transaction) => {
-                    const ref = doc(this.db, "rooms", this.roomId);
-                    const snap = await transaction.get(ref);
-                    if (!snap.exists()) return;
-                    
-                    const data = snap.data();
-                    const idx = data.players.findIndex(p => p.id === this.playerId);
-                    if (idx === -1) return;
-
-                    const newPlayers = [...data.players];
-                    newPlayers[idx] = { ...newPlayers[idx], x, y };
-
-                    transaction.update(ref, { players: newPlayers });
-                }).catch(console.error);
+                ctx.fillText(char, centerX, centerY);
+                // ctx.strokeText(char, centerX, centerY); // Можно включить обводку
             }
         }
 
+        // Инициализация
         window.onload = () => {
-            const game = new FixedGame();
-            document.getElementById('btn-start').onclick = () => game.joinOrCreate();
+            const app = new ChessApp();
+            
+            document.getElementById('btn-create').onclick = () => app.joinOrCreate('create');
+            document.getElementById('btn-join').onclick = () => {
+                const code = document.getElementById('input-code').value;
+                if(code) app.joinOrCreate('join_code', code);
+                else alert("Введите код");
+            };
+            document.getElementById('btn-quick').onclick = () => app.joinOrCreate('quick_match');
         };
+
     </script>
 
     <style>
-        body { margin: 0; background: #000; overflow: hidden; color: white; font-family: sans-serif; }
-        canvas { display: none; position: absolute; top: 0; left: 0; z-index: 1; cursor: crosshair; }
-        #ui { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 10; background: rgba(0,0,0,0.9);
+        body {
+            margin: 0;
+            background-color: #2c2c2c;
+            color: #eee;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
         }
-        button { 
-            padding: 20px 40px; font-size: 24px; background: #fff; color: #000; 
-            border: none; cursor: pointer; font-weight: bold;
+
+        /* Меню */
+        #ui {
+            background: #333;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
         }
-        button:hover { background: #ccc; }
-        h1 { margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
-        .controls-hint { margin-top: 15px; color: #888; font-size: 0.9rem; text-align: center; line-height: 1.5; }
+
+        h1 { color: #ffcc00; margin-bottom: 30px; }
+
+        .btn-group { display: flex; flex-direction: column; gap: 15px; }
+
+        button {
+            padding: 15px;
+            font-size: 1.1rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-weight: bold;
+        }
+
+        .btn-primary { background: #ffcc00; color: #000; }
+        .btn-primary:hover { background: #e6b800; transform: scale(1.02); }
+        
+        .btn-secondary { background: #555; color: #fff; }
+        .btn-secondary:hover { background: #666; }
+
+        input[type="text"] {
+            width: calc(100% - 24px);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #555;
+            background: #222;
+            color: #fff;
+            font-size: 1rem;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        /* Игра */
+        #game-ui {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        canvas {
+            background: #333;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            cursor: pointer;
+        }
+
+        #game-status {
+            font-size: 1.2rem;
+            color: #aaa;
+            background: #222;
+            padding: 10px 20px;
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
 
+<!-- Стартовое меню -->
 <div id="ui">
-    <h1>FIXED MOVEMENT</h1>
-    <button id="btn-start">ИГРАТЬ</button>
-    <div class="controls-hint">
-        Управление: WASD или Стрелки<br>
-        Камера следует за вами<br>
-        Красный крест = Центр Мира (0,0)<br>
-        <span style="color:#00ffcc">Теперь движение должно быть плавным!</span>
+    <h1>♟️ CHESS ONLINE</h1>
+    
+    <div class="btn-group">
+        <button id="btn-quick" class="btn-primary">⚡ Быстрый бой</button>
+        
+        <div style="border-top: 1px solid #555; margin: 10px 0;"></div>
+        
+        <button id="btn-create" class="btn-secondary">➕ Создать комнату</button>
+        
+        <div style="margin-top: 10px;">
+            <label style="display:block; text-align:left; margin-bottom:5px; font-size:0.9rem; color:#aaa;">Код друга:</label>
+            <input type="text" id="input-code" placeholder="XXXXXX" maxlength="6">
+            <button id="btn-join" class="btn-secondary" style="width:100%;">🔗 Войти по коду</button>
+        </div>
     </div>
 </div>
 
-<canvas id="game-canvas"></canvas>
+<!-- Игровой экран -->
+<div id="game-ui">
+    <div id="game-status">Загрузка...</div>
+    <canvas id="chess-board"></canvas>
+</div>
 
 </body>
 </html>
