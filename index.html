@@ -3,15 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Multiplayer Room Prototype</title>
+    <title>NetPlay Demo - Room System</title>
     <style>
         :root {
-            --bg-color: #1a1a1a;
-            --panel-bg: #2d2d2d;
+            --bg-color: #121212;
+            --panel-bg: #1e1e1e;
+            --card-bg: #2a2a2a;
             --accent: #00ffcc;
             --text-main: #ffffff;
             --text-muted: #aaaaaa;
             --danger: #ff4444;
+            --success: #4caf50;
             --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
 
@@ -33,22 +35,23 @@
             overflow: hidden;
         }
 
-        /* Контейнер приложения */
         #app-container {
             width: 100%;
-            max-width: 400px;
+            max-width: 450px;
             background: var(--panel-bg);
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            padding: 24px;
             position: relative;
-            transition: transform 0.3s ease;
+            min-height: 500px;
+            display: flex;
+            flex-direction: column;
         }
 
         h1 {
             text-align: center;
-            font-size: 1.5rem;
-            margin-bottom: 20px;
+            font-size: 1.6rem;
+            margin-bottom: 24px;
             color: var(--accent);
             text-transform: uppercase;
             letter-spacing: 2px;
@@ -57,6 +60,8 @@
         .screen {
             display: none;
             animation: fadeIn 0.3s ease-in-out;
+            flex-grow: 1;
+            overflow-y: auto;
         }
 
         .screen.active {
@@ -68,14 +73,14 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Формы и кнопки */
+        /* Forms & Inputs */
         .input-group {
-            margin-bottom: 15px;
+            margin-bottom: 16px;
         }
 
         label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 6px;
             color: var(--text-muted);
             font-size: 0.9rem;
         }
@@ -85,7 +90,7 @@
             padding: 12px;
             background: #1f1f1f;
             border: 1px solid #444;
-            border-radius: 6px;
+            border-radius: 8px;
             color: white;
             font-size: 1rem;
             outline: none;
@@ -98,9 +103,9 @@
 
         button {
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             font-size: 1rem;
             font-weight: bold;
             cursor: pointer;
@@ -132,137 +137,199 @@
             color: white;
         }
 
-        /* Игровой лобби */
-        .room-info {
-            background: #1f1f1f;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            text-align: center;
-        }
-
-        .room-code {
-            font-size: 2rem;
-            font-family: monospace;
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--accent);
             color: var(--accent);
-            letter-spacing: 4px;
-            margin: 10px 0;
-            user-select: all;
+        }
+        
+        .btn-outline:hover {
+            background: rgba(0, 255, 204, 0.1);
         }
 
-        .players-list {
+        /* Active Rooms List */
+        .rooms-list {
             list-style: none;
             margin-top: 10px;
+        }
+
+        .room-card {
+            background: var(--card-bg);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: border-color 0.2s;
+        }
+
+        .room-card:hover {
+            border-color: var(--accent);
+        }
+
+        .room-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .room-host {
+            font-weight: bold;
+            color: var(--text-main);
+        }
+
+        .room-code-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .room-code-value {
+            font-family: monospace;
+            color: var(--accent);
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 40px 0;
+            font-style: italic;
+        }
+
+        /* Lobby Players */
+        .players-list {
+            list-style: none;
+            margin-top: 15px;
+            background: #1f1f1f;
+            border-radius: 8px;
+            padding: 10px;
         }
 
         .player-item {
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
+            padding: 10px 0;
             border-bottom: 1px solid #333;
         }
-
-        .player-name {
-            font-weight: bold;
+        
+        .player-item:last-child {
+            border-bottom: none;
         }
 
-        .status-indicator {
-            width: 10px;
-            height: 10px;
+        .status-dot {
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: green;
             display: inline-block;
-            margin-right: 5px;
+            margin-right: 8px;
         }
 
-        /* Уведомления */
+        /* Toast */
         #toast {
-            position: absolute;
-            bottom: 20px;
+            position: fixed;
+            bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.9);
             color: white;
-            padding: 10px 20px;
-            border-radius: 20px;
+            padding: 12px 24px;
+            border-radius: 30px;
             font-size: 0.9rem;
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.3s;
-            z-index: 100;
+            z-index: 1000;
+            border: 1px solid #333;
         }
 
         #toast.show {
             opacity: 1;
         }
 
-        /* Debug Panel */
+        /* Debug */
         .debug-panel {
-            margin-top: 20px;
-            padding-top: 10px;
-            border-top: 1px dashed #444;
+            margin-top: auto;
+            padding-top: 15px;
+            border-top: 1px dashed #333;
+            text-align: center;
         }
         
         .debug-btn {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             background: transparent;
-            color: var(--text-muted);
-            border: 1px solid #444;
-            margin-top: 5px;
+            color: #555;
+            border: none;
+            cursor: pointer;
+            text-decoration: underline;
         }
         
         .debug-btn:hover {
-            color: white;
-            border-color: white;
+            color: var(--text-muted);
         }
 
+        canvas {
+            background: #000;
+            border-radius: 8px;
+            margin-top: 10px;
+            width: 100%;
+            height: 300px;
+            display: block;
+        }
     </style>
 </head>
 <body>
 
 <div id="app-container">
     
-    <!-- Экран Меню -->
+    <!-- 1. Главное Меню -->
     <div id="menu-screen" class="screen active">
         <h1>NetPlay Demo</h1>
         <div class="input-group">
             <label for="nickname">Ваш никнейм:</label>
-            <input type="text" id="nickname" placeholder="Игрок_1" value="Guest_<%= Math.floor(Math.random()*1000) %>">
+            <input type="text" id="nickname" placeholder="Введите имя...">
         </div>
         <button class="btn-primary" onclick="gameApp.createRoom()">Создать комнату</button>
-        <div style="margin: 15px 0; text-align: center; color: var(--text-muted)">— или —</div>
-        <div class="input-group">
-            <label for="join-code">Код комнаты:</label>
-            <input type="text" id="join-code" placeholder="XXXXXX" maxlength="6">
-        </div>
-        <button class="btn-secondary" onclick="gameApp.joinRoom()">Присоединиться</button>
+        <button class="btn-outline" onclick="gameApp.showActiveRooms()">Найти активную игру</button>
     </div>
 
-    <!-- Экран Лобби (Ожидание игроков) -->
+    <!-- 2. Список активных комнат -->
+    <div id="discover-screen" class="screen">
+        <h1>Активные комнаты</h1>
+        <p style="text-align:center; color:var(--text-muted); margin-bottom:15px;">Поиск игроков рядом...</p>
+        <ul class="rooms-list" id="active-rooms-list">
+            <!-- Комнаты будут здесь -->
+            <li class="empty-state">Нет открытых комнат.</li>
+        </ul>
+        <button class="btn-secondary" onclick="gameApp.backToMenu()">Назад в меню</button>
+    </div>
+
+    <!-- 3. Лобби (Ожидание) -->
     <div id="lobby-screen" class="screen">
         <h1>Лобби</h1>
-        <div class="room-info">
-            <p style="color: var(--text-muted)">Код комнаты:</p>
-            <div class="room-code" id="display-room-code">------</div>
-            <p style="font-size: 0.8rem; color: var(--text-muted)">Поделитесь этим кодом с другом.<br>(Откройте эту страницу во второй вкладке для теста)</p>
+        <div style="background:#1f1f1f; padding:15px; border-radius:8px; text-align:center; margin-bottom:15px;">
+            <p style="color:var(--text-muted); font-size:0.9rem;">Код вашей комнаты:</p>
+            <div id="display-room-code" style="font-size:1.8rem; font-family:monospace; color:var(--accent); margin:5px 0;">------</div>
+            <p style="font-size:0.8rem; color:var(--text-muted);">(Откройте вторую вкладку для теста)</p>
         </div>
         
-        <ul class="players-list" id="players-list">
-            <!-- Список игроков будет здесь -->
-        </ul>
+        <label>Игроки в комнате (<span id="player-count">1</span>):</label>
+        <ul class="players-list" id="players-list"></ul>
 
         <button class="btn-primary" id="start-game-btn" onclick="gameApp.startGame()" disabled>Начать игру</button>
-        <button class="btn-danger" onclick="gameApp.leaveRoom()">Выйти из комнаты</button>
+        <button class="btn-danger" onclick="gameApp.leaveRoom()">Выйти</button>
 
         <div class="debug-panel">
-            <button class="debug-btn" onclick="gameApp.exportState()">Экспорт состояния (JSON)</button>
+            <button class="debug-btn" onclick="gameApp.exportState()">📋 Экспорт состояния (JSON)</button>
         </div>
     </div>
 
-    <!-- Экран Игры (Заглушка) -->
+    <!-- 4. Игра (Заглушка) -->
     <div id="game-screen" class="screen">
-        <h1>Игра началась!</h1>
-        <canvas id="game-canvas" width="360" height="360"></canvas>
+        <h1>Игра запущена</h1>
+        <canvas id="game-canvas"></canvas>
         <button class="btn-secondary" onclick="gameApp.returnToLobby()">Вернуться в лобби</button>
     </div>
 
@@ -272,8 +339,8 @@
 
 <script>
 /**
- * Модульный класс для управления состоянием сети (имитация WebSocket через BroadcastChannel)
- * Если BroadcastChannel недоступен, используется localStorage fallback.
+ * Сетевой слой на базе BroadcastChannel
+ * Имитирует WebSocket для связи между вкладками одного браузера
  */
 class NetworkSimulator {
     constructor() {
@@ -284,41 +351,29 @@ class NetworkSimulator {
 
     init() {
         if ('BroadcastChannel' in window) {
-            // Используем BroadcastChannel для связи между вкладками
-            this.channel = new BroadcastChannel('netplay_demo_channel');
+            // Используем уникальный канал, чтобы не мешать другим демо
+            this.channel = new BroadcastChannel('netplay_demo_v3');
             this.channel.onmessage = (event) => this.handleMessage(event.data);
         } else {
-            console.warn("BroadcastChannel not supported, falling back to storage events");
-            window.addEventListener('storage', (e) => {
-                if (e.key === 'netplay_message') {
-                    this.handleMessage(JSON.parse(e.newValue));
-                }
-            });
+            console.error("BroadcastChannel not supported");
         }
     }
 
     sendMessage(type, payload) {
         const message = {
-            id: Date.now(),
             senderId: gameApp.playerId,
             type: type,
             payload: payload,
             timestamp: Date.now()
         };
-
         if (this.channel) {
             this.channel.postMessage(message);
-        } else {
-            localStorage.setItem('netplay_message', JSON.stringify(message));
-            // Очистка чтобы триггернуть событие снова при следующем сообщении
-            setTimeout(() => localStorage.removeItem('netplay_message'), 100);
         }
     }
 
     handleMessage(message) {
-        // Игнорируем свои же сообщения
-        if (message.senderId === gameApp.playerId) return;
-
+        if (message.senderId === gameApp.playerId) return; // Игнорируем себя
+        
         if (this.listeners[message.type]) {
             this.listeners[message.type](message.payload, message.senderId);
         }
@@ -330,7 +385,7 @@ class NetworkSimulator {
 }
 
 /**
- * Основной класс игры
+ * Логика приложения
  */
 class GameApplication {
     constructor() {
@@ -339,20 +394,22 @@ class GameApplication {
         this.nickname = '';
         this.roomCode = null;
         this.isHost = false;
-        this.players = []; // [{id, nickname}]
+        this.players = []; 
         
-        // DOM Elements
+        // DOM Refs
         this.screens = {
             menu: document.getElementById('menu-screen'),
+            discover: document.getElementById('discover-screen'),
             lobby: document.getElementById('lobby-screen'),
             game: document.getElementById('game-screen')
         };
         
         this.ui = {
             nicknameInput: document.getElementById('nickname'),
-            joinCodeInput: document.getElementById('join-code'),
+            activeRoomsList: document.getElementById('active-rooms-list'),
             roomCodeDisplay: document.getElementById('display-room-code'),
             playersList: document.getElementById('players-list'),
+            playerCount: document.getElementById('player-count'),
             startBtn: document.getElementById('start-game-btn'),
             toast: document.getElementById('toast')
         };
@@ -360,7 +417,7 @@ class GameApplication {
         this.bindEvents();
         this.setupNetworkListeners();
         
-        // Set random default nickname
+        // Default nickname
         this.ui.nicknameInput.value = `Player_${Math.floor(Math.random() * 1000)}`;
     }
 
@@ -383,48 +440,96 @@ class GameApplication {
     }
 
     bindEvents() {
-        // Enter key handling
-        this.ui.joinCodeInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.joinRoom();
+        // Enter key support
+        this.ui.nicknameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.createRoom();
         });
     }
 
     setupNetworkListeners() {
-        // Слушаем запросы на подключение к комнате
-        this.network.on('JOIN_REQUEST', (payload, senderId) => {
+        // 1. ЗАПРОС НА ПОИСК КОМНАТ (Ping)
+        // Когда кто-то открывает экран "Активные комнаты", он шлет PING_ROOMS.
+        // Если я Хост и у меня есть комната, я отвечаю ROOM_INFO.
+        this.network.on('PING_ROOMS', (payload, senderId) => {
+            if (this.isHost && this.roomCode) {
+                this.network.sendMessage('ROOM_INFO', {
+                    hostId: this.playerId,
+                    hostNickname: this.nickname,
+                    code: this.roomCode,
+                    currentPlayers: this.players.length
+                });
+            }
+        });
+
+        // 2. ОТВЕТ О КОМНАТЕ (для искателя)
+        // Получаем информацию о существующей комнате и рисуем карточку.
+        this.network.on('ROOM_INFO', (payload, senderId) => {
+            this.renderRoomCard(payload);
+        });
+
+        // 3. ЗАПРОС НА ВХОД (Join Request)
+        // Гость нашел комнату и хочет войти. Шлет JOIN_REQUEST с кодом и своим ID.
+        this.network.on('JOIN_REQUEST', (payload, guestId) => {
             if (!this.isHost || this.roomCode !== payload.code) return;
             
-            // Добавляем игрока
-            this.addPlayer(senderId, payload.nickname);
+            // Добавляем гостя
+            const newPlayer = { id: guestId, nickname: payload.nickname, isHost: false };
+            this.players.push(newPlayer);
             
-            // Отправляем подтверждение хоста всем в комнате
-            this.broadcastPlayerList();
-            this.showToast(`${payload.nickname} присоединился!`);
+            // Отправляем подтверждение ТОЛЬКО этому гостю
+            this.network.sendMessage('JOIN_ACCEPTED', {
+                targetId: guestId,
+                players: [...this.players], // Полный список
+                roomCode: this.roomCode
+            });
+
+            // Обновляем свой интерфейс
+            this.updateLobbyUI();
+            this.showToast(`${payload.nickname} вошел!`);
         });
 
-        // Слушаем выход игрока
-        this.network.on('LEAVE_ROOM', (payload, senderId) => {
-            this.removePlayer(senderId);
-            this.broadcastPlayerList();
+        // 4. ПРИНЯТО ВХОД (для гостя)
+        // Гость получил подтверждение. Переходим в лобби.
+        this.network.on('JOIN_ACCEPTED', (payload, hostId) => {
+            if (payload.targetId !== this.playerId) return; // Не наше сообщение
+            
+            this.players = payload.players;
+            this.roomCode = payload.roomCode;
+            this.isHost = false; // Мы теперь клиент
+            
+            this.enterLobby();
+            this.showToast("Успешно подключено!");
         });
 
-        // Синхронизация списка игроков (для клиентов)
-        this.network.on('PLAYER_LIST_SYNC', (payload, senderId) => {
-            if (senderId === this.getHostId()) {
-                this.players = payload.players;
-                this.renderPlayersList();
+        // 5. ОБНОВЛЕНИЕ СПИСКА ИГРОКОВ (Sync)
+        // Хост синхронизирует список при выходе кого-то или других изменениях
+        this.network.on('PLAYER_SYNC', (payload, senderId) => {
+             if (senderId === this.getRealHostId()) {
+                 this.players = payload.players;
+                 this.updateLobbyUI();
+             }
+        });
+        
+        // 6. ВЫХОД ИГРОКА
+        this.network.on('LEAVE_ROOM', (payload, leaverId) => {
+            if (this.isHost) {
+                this.players = this.players.filter(p => p.id !== leaverId);
+                this.broadcastPlayerSync();
+                this.updateLobbyUI();
             }
         });
         
-        // Старт игры сигнал
-        this.network.on('GAME_START', () => {
+        // 7. СТАРТ ИГРЫ
+        this.network.on('GAME_START_SIGNAL', () => {
             this.startGameLoop();
         });
     }
 
-    getHostId() {
+    getRealHostId() {
         return this.isHost ? this.playerId : this.players.find(p => p.isHost)?.id;
     }
+
+    // --- Действия пользователя ---
 
     createRoom() {
         this.nickname = this.ui.nicknameInput.value.trim() || "Host";
@@ -432,88 +537,102 @@ class GameApplication {
         this.isHost = true;
         this.players = [{ id: this.playerId, nickname: this.nickname, isHost: true }];
         
-        this.ui.roomCodeDisplay.textContent = this.roomCode;
-        this.renderPlayersList();
-        this.switchScreen('lobby');
-        this.updateStartButton();
-        
+        this.enterLobby();
         this.showToast(`Комната ${this.roomCode} создана`);
     }
 
-    joinRoom() {
-        const code = this.ui.joinCodeInput.value.trim().toUpperCase();
-        if (!code) {
-            this.showToast("Введите код комнаты");
-            return;
-        }
+    showActiveRooms() {
+        this.switchScreen('discover');
+        this.clearRoomList();
+        
+        // Рассылаем запрос всем вкладкам
+        this.network.sendMessage('PING_ROOMS', {});
+        
+        // Через секунду можно показать результат поиска (если ничего нет)
+        setTimeout(() => {
+            if (this.ui.activeRoomsList.children.length === 1 && 
+                this.ui.activeRoomsList.firstChild.classList.contains('empty-state')) {
+                // Уже есть пустой стейт, ничего делать не надо
+            }
+        }, 1000);
+    }
 
+    backToMenu() {
+        this.switchScreen('menu');
+    }
+
+    joinSpecificRoom(hostId, code, hostNick) {
         this.nickname = this.ui.nicknameInput.value.trim() || "Guest";
         this.roomCode = code;
         this.isHost = false;
         
-        // В реальной игре тут был бы HTTP запрос или WebSocket connect
-        // Здесь просто отправляем broadcast сообщение
-        this.network.sendMessage('JOIN_REQUEST', { 
-            code: this.roomCode, 
-            nickname: this.nickname 
+        // Отправляем запрос конкретно этому хосту (в BroadcastChannel это broadcast, но фильтруется по коду/ID)
+        this.network.sendMessage('JOIN_REQUEST', {
+            code: code,
+            nickname: this.nickname,
+            targetHostId: hostId 
         });
-
-        // Ждем ответа... если нет хоста, таймаут
-        let joined = false;
-        const checkJoinInterval = setInterval(() => {
-            if (this.players.length > 0 && !joined) {
-                clearInterval(checkJoinInterval);
-                joined = true;
-                this.ui.roomCodeDisplay.textContent = this.roomCode;
-                this.renderPlayersList();
-                this.switchScreen('lobby');
-                this.updateStartButton();
-                this.showToast("Вы вошли в комнату");
-            }
-        }, 100);
-
-        setTimeout(() => {
-            clearInterval(checkJoinInterval);
-            if(!joined) {
-                this.showToast("Ошибка: Комната не найдена или хост офлайн");
-                this.roomCode = null;
-            }
-        }, 3000);
+        
+        this.showToast("Подключение...");
     }
 
-    addPlayer(id, nickname) {
-        if (!this.players.find(p => p.id === id)) {
-            this.players.push({ id, nickname, isHost: false });
-        }
+    enterLobby() {
+        this.ui.roomCodeDisplay.textContent = this.roomCode;
+        this.updateLobbyUI();
+        this.switchScreen('lobby');
     }
 
-    removePlayer(id) {
-        this.players = this.players.filter(p => p.id !== id);
-    }
-
-    broadcastPlayerList() {
-        if (!this.isHost) return;
-        this.network.sendMessage('PLAYER_LIST_SYNC', { players: this.players });
-    }
-
-    renderPlayersList() {
+    updateLobbyUI() {
+        // Рендер списка игроков
         this.ui.playersList.innerHTML = '';
         this.players.forEach(player => {
             const li = document.createElement('li');
             li.className = 'player-item';
             li.innerHTML = `
-                <span class="player-name">${player.nickname}</span>
-                <span><span class="status-indicator"></span>${player.isHost ? '(Хост)' : ''}</span>
+                <span>${player.nickname}</span>
+                <span><span class="status-dot"></span>${player.isHost ? 'Хост' : 'Гость'}</span>
             `;
             this.ui.playersList.appendChild(li);
         });
-    }
+        
+        this.ui.playerCount.textContent = this.players.length;
 
-    updateStartButton() {
-        // Хост может начать только если есть хотя бы еще один игрок
+        // Активация кнопки старта
         const canStart = this.isHost && this.players.length >= 2;
         this.ui.startBtn.disabled = !canStart;
         this.ui.startBtn.style.opacity = canStart ? 1 : 0.5;
+    }
+
+    renderRoomCard(data) {
+        // Удаляем "пустое состояние", если оно есть
+        const emptyEl = this.ui.activeRoomsList.querySelector('.empty-state');
+        if (emptyEl) emptyEl.remove();
+
+        // Проверяем, нет ли уже такой комнаты в списке (дубликаты сообщений)
+        const existingCard = Array.from(this.ui.activeRoomsList.querySelectorAll('.room-card'))
+            .find(card => card.dataset.hostId === data.hostId);
+        
+        if (existingCard) return; 
+
+        const li = document.createElement('li');
+        li.className = 'room-card';
+        li.dataset.hostId = data.hostId;
+        li.innerHTML = `
+            <div class="room-info">
+                <span class="room-host">${data.hostNickname}</span>
+                <span class="room-code-label">Код: <span class="room-code-value">${data.code}</span></span>
+                <span class="room-code-label">Игроков: ${data.currentPlayers}/4</span>
+            </div>
+            <button class="btn-primary" style="width:auto; padding:8px 16px;" 
+                    onclick="gameApp.joinSpecificRoom('${data.hostId}', '${data.code}', '${data.hostNickname}')">
+                Войти
+            </button>
+        `;
+        this.ui.activeRoomsList.appendChild(li);
+    }
+
+    clearRoomList() {
+        this.ui.activeRoomsList.innerHTML = '<li class="empty-state">Нет открытых комнат.</li>';
     }
 
     leaveRoom() {
@@ -527,13 +646,18 @@ class GameApplication {
         this.roomCode = null;
         this.isHost = false;
         this.players = [];
-        this.ui.joinCodeInput.value = '';
         this.ui.roomCodeDisplay.textContent = '------';
+        this.clearRoomList();
+    }
+
+    broadcastPlayerSync() {
+        if (!this.isHost) return;
+        this.network.sendMessage('PLAYER_SYNC', { players: this.players });
     }
 
     startGame() {
         if (!this.isHost) return;
-        this.network.sendMessage('GAME_START', {});
+        this.network.sendMessage('GAME_START_SIGNAL', {});
         this.startGameLoop();
     }
 
@@ -545,14 +669,14 @@ class GameApplication {
     returnToLobby() {
         this.stopGameLoop();
         this.switchScreen('lobby');
-        this.updateStartButton();
+        this.updateLobbyUI();
     }
 
     stopGameLoop() {
         cancelAnimationFrame(this.gameLoopId);
     }
 
-    // --- Простая графическая заглушка на Canvas ---
+    // --- Canvas Logic (Simple Bouncing Balls) ---
     canvasCtx = null;
     gameObjects = [];
     gameLoopId = null;
@@ -561,21 +685,21 @@ class GameApplication {
         const canvas = document.getElementById('game-canvas');
         this.canvasCtx = canvas.getContext('2d');
         
-        // Retina support
+        // Retina Support
         const dpr = window.devicePixelRatio || 1;
         const rect = canvas.getBoundingClientRect();
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
         this.canvasCtx.scale(dpr, dpr);
 
-        // Create simple objects representing players
+        // Init Objects based on players
         this.gameObjects = this.players.map((p, index) => ({
-            x: 50 + index * 50,
-            y: 100,
-            radius: 15,
-            color: p.isHost ? '#00ffcc' : '#ff4444',
-            vx: (Math.random() - 0.5) * 2,
-            vy: (Math.random() - 0.5) * 2
+            x: 50 + index * 40,
+            y: 50 + index * 20,
+            radius: 12,
+            color: p.isHost ? '#00ffcc' : ['#ff4444', '#4488ff', '#ffff44'][index % 3],
+            vx: (Math.random() - 0.5) * 3,
+            vy: (Math.random() - 0.5) * 3
         }));
 
         this.loop();
@@ -588,16 +712,14 @@ class GameApplication {
         const w = ctx.canvas.clientWidth;
         const h = ctx.canvas.clientHeight;
 
-        // Clear
-        ctx.fillStyle = '#1a1a1a';
+        ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, w, h);
 
-        // Update & Draw
         this.gameObjects.forEach(obj => {
             obj.x += obj.vx;
             obj.y += obj.vy;
 
-            // Bounce
+            // Wall collision
             if (obj.x < obj.radius || obj.x > w - obj.radius) obj.vx *= -1;
             if (obj.y < obj.radius || obj.y > h - obj.radius) obj.vy *= -1;
 
@@ -606,7 +728,7 @@ class GameApplication {
             ctx.fillStyle = obj.color;
             ctx.fill();
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1;
             ctx.stroke();
         });
 
@@ -625,15 +747,14 @@ class GameApplication {
         navigator.clipboard.writeText(jsonStr).then(() => {
             this.showToast("Состояние скопировано в буфер обмена");
         }).catch(err => {
-            console.error('Failed to copy: ', err);
+            console.error('Copy failed:', err);
             alert(jsonStr);
         });
     }
 }
 
-// Запуск приложения
+// Initialize App
 const gameApp = new GameApplication();
-
 </script>
 </body>
 </html>
