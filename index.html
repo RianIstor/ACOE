@@ -1,27 +1,17 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sergey's NetPlay - Fixed Start</title>
+    <title>Auto-Match Game</title>
     
-    <!-- Firebase SDK via CDN -->
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { 
-            getFirestore, 
-            collection, 
-            addDoc, 
-            doc, 
-            updateDoc, 
-            deleteDoc,
-            onSnapshot, 
-            query, 
-            where, 
-            limit,
-            serverTimestamp,
-            runTransaction,
-            getDocs
+            getFirestore, collection, addDoc, doc, updateDoc, deleteDoc,
+            onSnapshot, query, where, limit, serverTimestamp, runTransaction, getDocs
         } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
         // Твой конфиг
@@ -39,637 +29,322 @@
         try {
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
-            console.log("✅ Firebase Initialized");
+            console.log("✅ Firebase Ready");
         } catch (e) {
-            console.error("❌ Firebase Error:", e);
+            console.error("❌ Error:", e);
         }
 
-        class NetworkService {
+        class GameEngine {
             constructor() {
                 this.db = db;
-                this.unsubs = [];
-            }
-
-            async createRoom(nickname) {
-                const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-                const playerId = crypto.randomUUID();
-                
-                try {
-                    const docRef = await addDoc(collection(this.db, "rooms"), {
-                        code: code,
-                        hostName: nickname,
-                        createdAt: serverTimestamp(),
-                        players: [{ id: playerId, nickname: nickname, isHost: true, x: 50, y: 50 }],
-                        status: "waiting",
-                        lastUpdate: serverTimestamp()
-                    });
-                    return { roomId: docRef.id, code, playerId };
-                } catch (err) {
-                    throw err;
-                }
-            }
-
-            async findOrCreateRoom(nickname) {
-                const playerId = crypto.randomUUID();
-                
-                const q = query(
-                    collection(this.db, "rooms"),
-                    where("status", "==", "waiting"),
-                    limit(1)
-                );
-
-                try {
-                    const snapshot = await getDocs(q);
-                    
-                    if (!snapshot.empty) {
-                        const roomDoc = snapshot.docs[0];
-                        const roomId = roomDoc.id;
-                        const data = roomDoc.data();
-
-                        await runTransaction(this.db, async (transaction) => {
-                            const ref = doc(this.db, "rooms", roomId);
-                            const snap = await transaction.get(ref);
-                            
-                            if (!snap.exists() || snap.data().status !== "waiting") {
-                                throw new Error("ROOM_TAKEN");
-                            }
-
-                            const newPlayer = { 
-                                id: playerId, 
-                                nickname: nickname, 
-                                isHost: false,
-                                x: 100 + Math.random()*50, 
-                                y: 100 + Math.random()*50 
-                            };
-
-                            transaction.update(ref, {
-                                players: [...snap.data().players, newPlayer],
-                                lastUpdate: serverTimestamp()
-                            });
-                        });
-
-                        return { roomId, code: data.code, playerId, joinedExisting: true };
-                    } else {
-                        const res = await this.createRoom(nickname);
-                        return { ...res, joinedExisting: false };
-                    }
-                } catch (err) {
-                    if (err.message === "ROOM_TAKEN") {
-                        throw new Error("Комната только что заполнилась. Попробуйте еще раз.");
-                    }
-                    throw err;
-                }
-            }
-
-            async joinByCode(code, nickname) {
-                const playerId = crypto.randomUUID();
-                const upperCode = code.toUpperCase();
-
-                const q = query(
-                    collection(this.db, "rooms"),
-                    where("code", "==", upperCode),
-                    limit(1)
-                );
-
-                const snapshot = await getDocs(q);
-                if (snapshot.empty) throw new Error("Комната с таким кодом не найдена");
-
-                const roomDoc = snapshot.docs[0];
-                const roomId = roomDoc.id;
-                const data = roomDoc.data();
-
-                if (data.status !== "waiting") throw new Error("Игра уже началась");
-                if (data.players.length >= 4) throw new Error("Комната полная");
-
-                await runTransaction(this.db, async (transaction) => {
-                    const ref = doc(this.db, "rooms", roomId);
-                    const snap = await transaction.get(ref);
-                    const currentData = snap.data();
-                    
-                    const newPlayer = { 
-                        id: playerId, 
-                        nickname: nickname, 
-                        isHost: false,
-                        x: 100 + Math.random()*50, 
-                        y: 100 + Math.random()*50 
-                    };
-
-                    transaction.update(ref, {
-                        players: [...currentData.players, newPlayer],
-                        lastUpdate: serverTimestamp()
-                    });
-                });
-
-                return { roomId, code: upperCode, playerId };
-            }
-
-            listenToRoom(roomId, onUpdate, onError) {
-                const unsub = onSnapshot(doc(this.db, "rooms", roomId), (docSnap) => {
-                    if (docSnap.exists()) {
-                        onUpdate(docSnap.data());
-                    } else {
-                        onError(new Error("Комната удалена"));
-                    }
-                }, onError);
-                this.unsubs.push(unsub);
-                return unsub;
-            }
-
-            updatePosition(roomId, playerId, newX, newY) {
-                return runTransaction(this.db, async (transaction) => {
-                    const ref = doc(this.db, "rooms", roomId);
-                    const snap = await transaction.get(ref);
-                    if (!snap.exists()) return;
-                    
-                    const data = snap.data();
-                    const idx = data.players.findIndex(p => p.id === playerId);
-                    if (idx === -1) return;
-
-                    const newPlayers = [...data.players];
-                    newPlayers[idx] = { ...newPlayers[idx], x: newX, y: newY };
-
-                    transaction.update(ref, { 
-                        players: newPlayers,
-                        lastUpdate: serverTimestamp() 
-                    });
-                });
-            }
-
-            startGame(roomId) {
-                return updateDoc(doc(this.db, "rooms", roomId), {
-                    status: "playing",
-                    startedAt: serverTimestamp()
-                });
-            }
-
-            leaveRoom(roomId, playerId) {
-                return runTransaction(this.db, async (transaction) => {
-                    const ref = doc(this.db, "rooms", roomId);
-                    const snap = await transaction.get(ref);
-                    if (!snap.exists()) return;
-                    
-                    const data = snap.data();
-                    const remaining = data.players.filter(p => p.id !== playerId);
-                    
-                    if (remaining.length === 0) {
-                        transaction.delete(ref);
-                    } else {
-                        transaction.update(ref, { players: remaining });
-                    }
-                });
-            }
-
-            cleanup() {
-                this.unsubs.forEach(fn => fn());
-                this.unsubs = [];
-            }
-        }
-
-        class GameApp {
-            constructor() {
-                this.net = new NetworkService();
-                this.playerId = "";
-                this.nickname = "";
-                this.roomId = "";
-                this.roomCode = "";
+                this.playerId = crypto.randomUUID();
+                this.roomId = null;
                 this.isHost = false;
                 this.players = [];
-                this.inGame = false;
-                this.gameLoopId = null;
+                this.gameStarted = false;
+                this.unsub = null;
+                
+                // Игровые переменные
+                this.canvas = document.getElementById('game-canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.keys = {};
                 this.lastSendTime = 0;
-                this.roomListener = null;
+                this.loopId = null;
 
-                this.ui = {
-                    screens: {
-                        menu: document.getElementById('menu-screen'),
-                        lobby: document.getElementById('lobby-screen'),
-                        game: document.getElementById('game-screen')
-                    },
-                    inputs: {
-                        nick: document.getElementById('nickname-input'),
-                        code: document.getElementById('join-code-input')
-                    },
-                    displays: {
-                        roomCode: document.getElementById('display-room-code'),
-                        playerList: document.getElementById('players-list'),
-                        count: document.getElementById('player-count'),
-                        status: document.getElementById('network-status'),
-                        toast: document.getElementById('toast')
-                    },
-                    buttons: {
-                        start: document.getElementById('start-btn')
-                    }
-                };
-
-                this.initUI();
+                this.initInput();
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
             }
 
-            initUI() {
-                this.ui.inputs.nick.value = `Player_${Math.floor(Math.random() * 1000)}`;
+            resizeCanvas() {
+                const dpr = window.devicePixelRatio || 1;
+                const rect = this.canvas.getBoundingClientRect();
+                this.canvas.width = rect.width * dpr;
+                this.canvas.height = rect.height * dpr;
+                this.ctx.scale(dpr, dpr);
+                this.w = rect.width;
+                this.h = rect.height;
+            }
+
+            initInput() {
+                window.addEventListener('keydown', e => this.keys[e.key.toLowerCase()] = true);
+                window.addEventListener('keyup', e => this.keys[e.key.toLowerCase()] = false);
+            }
+
+            async play() {
+                document.getElementById('ui-menu').style.display = 'none';
+                document.getElementById('ui-loading').style.display = 'flex';
                 
-                document.getElementById('btn-create').onclick = () => this.handleCreate();
-                document.getElementById('btn-find').onclick = () => this.handleFindMatch();
-                document.getElementById('btn-join-code').onclick = () => this.handleJoinByCode();
-                document.getElementById('btn-start').onclick = () => this.handleStartGame();
-                document.getElementById('btn-leave').onclick = () => this.handleLeave();
-                document.getElementById('btn-back-menu').onclick = () => this.showScreen('menu');
-            }
-
-            showScreen(name) {
-                Object.values(this.ui.screens).forEach(el => el.classList.remove('active'));
-                this.ui.screens[name].classList.add('active');
-            }
-
-            setStatus(msg) {
-                this.ui.displays.status.textContent = msg;
-            }
-
-            showToast(msg) {
-                this.ui.displays.toast.textContent = msg;
-                this.ui.displays.toast.classList.add('show');
-                setTimeout(() => this.ui.displays.toast.classList.remove('show'), 3000);
-            }
-
-            async handleCreate() {
-                this.nickname = this.ui.inputs.nick.value.trim() || "Host";
-                this.setStatus("Создание...");
                 try {
-                    const res = await this.net.createRoom(this.nickname);
-                    this.setupSession(res);
-                    this.showToast("Комната создана!");
-                } catch (e) {
-                    this.setStatus("Ошибка");
-                    alert(e.message);
-                }
-            }
+                    // 1. Поиск комнаты
+                    const q = query(collection(this.db, "rooms"), where("status", "==", "waiting"), limit(1));
+                    const snapshot = await getDocs(q);
 
-            async handleFindMatch() {
-                this.nickname = this.ui.inputs.nick.value.trim() || "Guest";
-                this.setStatus("Поиск соперника...");
-                try {
-                    const res = await this.net.findOrCreateRoom(this.nickname);
-                    this.setupSession(res);
-                    if (res.joinedExisting) {
-                        this.showToast("Найдена игра! Подключаемся...");
+                    if (!snapshot.empty) {
+                        // Нашли! Заходим.
+                        const roomDoc = snapshot.docs[0];
+                        this.roomId = roomDoc.id;
+                        await this.joinRoomInternal(roomDoc.data().players);
                     } else {
-                        this.showToast("Вы создали игру. Ждем соперника...");
+                        // Нет комнат. Создаем.
+                        const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+                        const newPlayer = { id: this.playerId, x: this.w/2, y: this.h/2, isHost: true };
+                        
+                        const docRef = await addDoc(collection(this.db, "rooms"), {
+                            code: code,
+                            status: "waiting",
+                            players: [newPlayer],
+                            createdAt: serverTimestamp()
+                        });
+                        
+                        this.roomId = docRef.id;
+                        this.isHost = true;
+                        this.players = [newPlayer];
+                        this.listenToRoom();
                     }
-                } catch (e) {
-                    this.setStatus("Ошибка поиска");
-                    alert(e.message);
+                } catch (err) {
+                    alert("Ошибка сети: " + err.message);
+                    location.reload();
                 }
             }
 
-            async handleJoinByCode() {
-                const code = this.ui.inputs.code.value.trim();
-                if (!code) return this.showToast("Введите код");
-                
-                this.nickname = this.ui.inputs.nick.value.trim() || "Guest";
-                this.setStatus("Подключение...");
-                try {
-                    const res = await this.net.joinByCode(code, this.nickname);
-                    this.setupSession(res);
-                    this.showToast("Успешно подключено!");
-                } catch (e) {
-                    this.setStatus("Ошибка");
-                    alert(e.message);
-                }
-            }
+            async joinRoomInternal(currentPlayers) {
+                // Транзакция для безопасного добавления себя
+                await runTransaction(this.db, async (transaction) => {
+                    const ref = doc(this.db, "rooms", this.roomId);
+                    const snap = await transaction.get(ref);
+                    
+                    if (!snap.exists() || snap.data().status !== "waiting") {
+                        throw new Error("Комната занята или закрыта");
+                    }
 
-            setupSession(data) {
-                this.playerId = data.playerId;
-                this.roomId = data.roomId;
-                this.roomCode = data.code;
-                
-                // Сразу слушаем комнату
+                    const newMe = { 
+                        id: this.playerId, 
+                        x: Math.random() * this.w, 
+                        y: Math.random() * this.h, 
+                        isHost: false 
+                    };
+                    
+                    const updatedPlayers = [...snap.data().players, newMe];
+                    
+                    transaction.update(ref, {
+                        players: updatedPlayers,
+                        // Если стало 2 игрока - сразу стартуем игру в базе
+                        status: updatedPlayers.length >= 2 ? "playing" : "waiting"
+                    });
+                });
+
                 this.listenToRoom();
-                this.showScreen('lobby');
             }
 
             listenToRoom() {
-                if (this.roomListener) this.roomListener();
+                if (this.unsub) this.unsub();
                 
-                this.roomListener = this.net.listenToRoom(
-                    this.roomId,
-                    (data) => {
-                        this.players = data.players || [];
-                        
-                        // Определяем роль: если я первый в списке или помечен как Host
-                        const me = this.players.find(p => p.id === this.playerId);
-                        this.isHost = me ? me.isHost : false;
-
-                        this.renderLobby();
-
-                        // ЕСЛИ СТАТУС ИЗМЕНИЛСЯ НА PLAYING И МЫ ЕЩЕ НЕ В ИГРЕ -> ЗАПУСКАЕМ ЦИКЛ
-                        // Это важно для гостя, который узнает о старте от хоста через базу
-                        if (data.status === "playing" && !this.inGame) {
-                             this.startGameLoop();
-                        }
-                    },
-                    (err) => {
-                        console.error(err);
-                        this.showToast("Связь потеряна");
-                        this.handleLeave();
+                this.unsub = onSnapshot(doc(this.db, "rooms", this.roomId), (docSnap) => {
+                    if (!docSnap.exists()) {
+                        alert("Комната удалена");
+                        location.reload();
+                        return;
                     }
-                );
-            }
-
-            renderLobby() {
-                this.ui.displays.roomCode.textContent = this.roomCode;
-                this.ui.displays.count.textContent = this.players.length;
-                
-                this.ui.displays.playerList.innerHTML = '';
-                this.players.forEach(p => {
-                    const li = document.createElement('li');
-                    li.className = 'player-item';
-                    li.innerHTML = `
-                        <span>${p.nickname} ${p.isHost ? '👑' : ''}</span>
-                        <span style="color:${p.id === this.playerId ? '#00ffcc' : '#aaa'}">${p.id === this.playerId ? '(Вы)' : ''}</span>
-                    `;
-                    this.ui.displays.playerList.appendChild(li);
+                    
+                    const data = docSnap.data();
+                    this.players = data.players;
+                    
+                    // Проверка статуса игры
+                    if (data.status === "playing" && !this.gameStarted) {
+                        this.startGameLoop();
+                    }
+                }, (err) => {
+                    console.error(err);
                 });
-
-                // Кнопка старта доступна только хосту и если есть >1 игрок
-                const canStart = this.isHost && this.players.length >= 2;
-                this.ui.buttons.start.disabled = !canStart;
-                this.ui.buttons.start.style.opacity = canStart ? 1 : 0.5;
-            }
-
-            async handleStartGame() {
-                if (!this.isHost) return;
-                this.setStatus("Старт...");
-                try {
-                    // 1. Обновляем базу
-                    await this.net.startGame(this.roomId);
-                    
-                    // 2. Принудительно запускаем цикл у себя (чтобы не ждать тика базы)
-                    this.startGameLoop();
-                    
-                    this.showToast("Игра началась!");
-                } catch (e) {
-                    alert("Ошибка старта: " + e.message);
-                }
             }
 
             startGameLoop() {
-                if (this.inGame) return; // Защита от двойного запуска
-                this.inGame = true;
-                this.showScreen('game');
-                this.initCanvas();
-            }
-
-            stopGameLoop() {
-                this.inGame = false;
-                cancelAnimationFrame(this.gameLoopId);
-            }
-
-            handleLeave() {
-                this.stopGameLoop();
-                if (this.roomId && this.playerId) {
-                    this.net.leaveRoom(this.roomId, this.playerId);
-                }
-                this.net.cleanup();
-                this.roomListener = null;
-                this.roomId = "";
-                this.players = [];
-                this.showScreen('menu');
-                this.setStatus("Готов");
-            }
-
-            // --- Canvas Logic ---
-            ctx = null;
-            canvasWidth = 0;
-            canvasHeight = 0;
-
-            initCanvas() {
-                const canvas = document.getElementById('game-canvas');
-                this.ctx = canvas.getContext('2d');
-                
-                const dpr = window.devicePixelRatio || 1;
-                const rect = canvas.getBoundingClientRect();
-                canvas.width = rect.width * dpr;
-                canvas.height = rect.height * dpr;
-                this.ctx.scale(dpr, dpr);
-                
-                this.canvasWidth = rect.width;
-                this.canvasHeight = rect.height;
-                
+                this.gameStarted = true;
+                document.getElementById('ui-loading').style.display = 'none';
+                this.canvas.style.display = 'block';
                 this.loop();
             }
 
             loop() {
-                if (!this.inGame || !this.ctx) return;
+                if (!this.gameStarted) return;
 
                 const ctx = this.ctx;
-                const w = this.canvasWidth;
-                const h = this.canvasHeight;
+                const w = this.w;
+                const h = this.h;
 
-                // Clear
-                ctx.fillStyle = '#111';
+                // Очистка
+                ctx.fillStyle = '#000';
                 ctx.fillRect(0, 0, w, h);
 
-                // Find Me
+                // Движение моего персонажа
                 const me = this.players.find(p => p.id === this.playerId);
-                
                 if (me) {
-                    // Simple Movement (Random Walk for Demo)
-                    me.x += (Math.random() - 0.5) * 3;
-                    me.y += (Math.random() - 0.5) * 3;
+                    const speed = 5;
+                    if (this.keys['w'] || this.keys['arrowup']) me.y -= speed;
+                    if (this.keys['s'] || this.keys['arrowdown']) me.y += speed;
+                    if (this.keys['a'] || this.keys['arrowleft']) me.x -= speed;
+                    if (this.keys['d'] || this.keys['arrowright']) me.x += speed;
 
-                    // Bounds
+                    // Границы
                     if (me.x < 20) me.x = 20;
                     if (me.x > w - 20) me.x = w - 20;
                     if (me.y < 20) me.y = 20;
                     if (me.y > h - 20) me.y = h - 20;
 
-                    // Send Position Throttled
+                    // Отправка позиции (Throttle 50ms для плавности)
                     const now = Date.now();
-                    if (now - this.lastSendTime > 100) { // Every 100ms
-                        this.net.updatePosition(this.roomId, this.playerId, me.x, me.y);
+                    if (now - this.lastSendTime > 50) {
+                        this.updatePosition(me.x, me.y);
                         this.lastSendTime = now;
                     }
                 }
 
-                // Draw All Players
-                this.players.forEach(player => {
+                // Рендер всех игроков
+                this.players.forEach(p => {
                     ctx.beginPath();
-                    ctx.arc(player.x, player.y, 15, 0, Math.PI * 2);
+                    ctx.rect(p.x - 15, p.y - 15, 30, 30); // Квадрат
                     
-                    if (player.isHost) {
-                        ctx.fillStyle = '#00ffcc'; // Cyan
+                    // Цвет: Хост белый, Гость красный (или наоборот, для различения)
+                    if (p.id === this.playerId) {
+                        ctx.fillStyle = '#fff'; // Я всегда белый
                     } else {
-                        ctx.fillStyle = '#ff4444'; // Red
+                        ctx.fillStyle = '#ff4444'; // Друг красный
                     }
                     
                     ctx.fill();
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#333';
                     ctx.stroke();
-
-                    ctx.fillStyle = '#fff';
-                    ctx.font = 'bold 12px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(player.nickname, player.x, player.y - 25);
                 });
 
-                this.gameLoopId = requestAnimationFrame(() => this.loop());
+                this.loopId = requestAnimationFrame(() => this.loop());
+            }
+
+            updatePosition(x, y) {
+                // Оптимизация: пишем только координаты конкретного игрока внутри массива
+                // Firestore не позволяет обновлять элемент массива напрямую без чтения всего массива.
+                // Для простоты делаем транзакцию обновления всего массива players.
+                runTransaction(this.db, async (transaction) => {
+                    const ref = doc(this.db, "rooms", this.roomId);
+                    const snap = await transaction.get(ref);
+                    if (!snap.exists()) return;
+                    
+                    const data = snap.data();
+                    const idx = data.players.findIndex(p => p.id === this.playerId);
+                    if (idx === -1) return;
+
+                    const newPlayers = [...data.players];
+                    newPlayers[idx] = { ...newPlayers[idx], x, y };
+
+                    transaction.update(ref, { players: newPlayers });
+                }).catch(console.error);
             }
         }
 
-        window.gameApp = new GameApp();
+        // Инициализация при загрузке DOM
+        window.onload = () => {
+            const game = new GameEngine();
+            window.gameInstance = game; // Доступ из консоли для отладки
+            
+            // Привязка кнопки
+            document.getElementById('btn-play').onclick = () => game.play();
+        };
 
     </script>
 
     <style>
-        :root {
-            --bg-color: #121212;
-            --panel-bg: #1e1e1e;
-            --card-bg: #2a2a2a;
-            --accent: #00ffcc;
-            --text-main: #ffffff;
-            --text-muted: #aaaaaa;
-            --danger: #ff4444;
-            --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: var(--font-family);
-            height: 100vh;
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: sans-serif;
+            overflow: hidden; /* Убираем скролл */
             display: flex;
             justify-content: center;
             align-items: center;
+            height: 100vh;
         }
 
-        #app-container {
-            width: 100%;
-            max-width: 450px;
-            background: var(--panel-bg);
-            border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-            padding: 24px;
-            min-height: 500px;
+        canvas {
+            display: none; /* Скрыт до начала игры */
+            border: 1px solid #333;
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
             display: flex;
             flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            background: rgba(0,0,0,0.9);
         }
 
-        h1 { text-align: center; font-size: 1.5rem; margin-bottom: 20px; color: var(--accent); }
-        
-        .screen { display: none; animation: fadeIn 0.3s; flex-grow: 1; overflow-y: auto; }
-        .screen.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-        .input-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.9rem; }
-        input[type="text"] {
-            width: 100%; padding: 12px; background: #1f1f1f; border: 1px solid #444;
-            border-radius: 8px; color: white; font-size: 1rem; outline: none;
+        #ui-loading {
+            display: none;
         }
-        input:focus { border-color: var(--accent); }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            color: #00ffcc;
+        }
 
         button {
-            width: 100%; padding: 14px; border: none; border-radius: 8px;
-            font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 10px;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            background: #00ffcc;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.1s;
         }
-        .btn-primary { background: var(--accent); color: #000; }
-        .btn-primary:hover { background: #00ddbb; }
-        .btn-secondary { background: #444; color: white; }
-        .btn-danger { background: var(--danger); color: white; }
-        .btn-outline { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
 
-        /* Lobby */
-        .room-info-box {
-            background: #1f1f1f; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 15px;
+        button:hover {
+            transform: scale(1.05);
         }
-        .code-display {
-            font-size: 2rem; font-family: monospace; color: var(--accent); letter-spacing: 3px; margin: 10px 0; user-select: all;
+
+        .loader {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #333;
+            border-top: 4px solid #00ffcc;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
         }
-        .players-list { list-style: none; margin-top: 10px; }
-        .player-item {
-            display: flex; justify-content: space-between; padding: 10px;
-            background: #252525; margin-bottom: 5px; border-radius: 6px;
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         
-        #toast {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.9); color: white; padding: 10px 20px;
-            border-radius: 20px; opacity: 0; transition: 0.3s; z-index: 1000;
+        p {
+            margin-top: 10px;
+            color: #aaa;
         }
-        #toast.show { opacity: 1; }
-
-        canvas { width: 100%; height: 300px; background: #000; border-radius: 8px; margin-top: 10px; display: block;}
-        
-        .divider {
-            text-align: center; color: var(--text-muted); margin: 15px 0; font-size: 0.8rem;
-            position: relative;
-        }
-        .divider::before, .divider::after {
-            content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: #444;
-        }
-        .divider::before { left: 0; }
-        .divider::after { right: 0; }
     </style>
 </head>
 <body>
 
-<div id="app-container">
-    
-    <!-- 1. Меню -->
-    <div id="menu-screen" class="screen active">
-        <h1>NetPlay Online</h1>
-        
-        <div class="input-group">
-            <label>Ваш никнейм:</label>
-            <input type="text" id="nickname-input" placeholder="Player_Name">
-        </div>
-
-        <button id="btn-find" class="btn-primary">⚡ Быстрый бой (Автопоиск)</button>
-        
-        <div class="divider">— или —</div>
-
-        <div class="input-group">
-            <label>Код комнаты друга:</label>
-            <input type="text" id="join-code-input" placeholder="XXXXXX" maxlength="6">
-        </div>
-        <button id="btn-join-code" class="btn-outline">🔗 Войти по коду</button>
-        
-        <div class="divider">— или —</div>
-        
-        <button id="btn-create" class="btn-secondary">➕ Создать свою комнату</button>
-
-        <div id="network-status" style="text-align:center; margin-top:15px; font-size:0.8rem; color:var(--text-muted);">
-            Статус: Готов
-        </div>
+    <!-- Меню -->
+    <div id="ui-menu" class="ui-layer">
+        <h1>AUTO MATCH</h1>
+        <button id="btn-play">ИГРАТЬ</button>
+        <p>Нажми, чтобы найти соперника</p>
     </div>
 
-    <!-- 2. Лобби -->
-    <div id="lobby-screen" class="screen">
-        <h1>Лобби</h1>
-        <div class="room-info-box">
-            <p style="color:var(--text-muted)">Код комнаты:</p>
-            <div id="display-room-code" class="code-display">------</div>
-            <p style="font-size:0.8rem; color:var(--text-muted)">Перешлите код другу!</p>
-        </div>
-        
-        <label>Игроки (<span id="player-count">1</span>):</label>
-        <ul id="players-list" class="players-list"></ul>
-
-        <button id="start-btn" class="btn-primary" disabled>Начать игру</button>
-        <button id="btn-leave" class="btn-danger">Выйти</button>
+    <!-- Экран загрузки/поиска -->
+    <div id="ui-loading" class="ui-layer">
+        <div class="loader"></div>
+        <p>Поиск игры...</p>
     </div>
 
-    <!-- 3. Игра -->
-    <div id="game-screen" class="screen">
-        <h1>Игра запущена</h1>
-        <canvas id="game-canvas"></canvas>
-        <button id="btn-back-menu" class="btn-secondary">Вернуться в меню</button>
-    </div>
-
-</div>
-
-<div id="toast"></div>
+    <!-- Игровой холст -->
+    <canvas id="game-canvas"></canvas>
 
 </body>
 </html>
